@@ -50,3 +50,7 @@ The initial release does not depend on the optional M6 extensions.
 Idempotent persisted results do not imply exactly-once network requests or
 exactly-once external side effects. Distributed execution and production-scale
 crawling are outside the initial scope.
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Yehor Maksimov.
