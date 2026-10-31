@@ -1,0 +1,254 @@
+[
+  {
+    "id": "B01",
+    "number": 1,
+    "title": "Bootstrap an installable Python package and development toolchain",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/1",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B02",
+    "number": 2,
+    "title": "Add a pinned Test Stand integration harness",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/2",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B03",
+    "number": 3,
+    "title": "Define typed jobs, configuration, outcomes, and error categories",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/3",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B04",
+    "number": 4,
+    "title": "Implement asynchronous browser and context lifecycle management",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/4",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B05",
+    "number": 5,
+    "title": "Extract catalog records and follow pagination through the browser",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/5",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B06",
+    "number": 6,
+    "title": "Persist page results and checkpoints atomically in SQLite",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/6",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B07",
+    "number": 7,
+    "title": "Wire a single-job CLI from browser input to persisted result",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/7",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B08",
+    "number": 8,
+    "title": "Add a real-browser end-to-end test for the complete vertical slice",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/8",
+    "milestone": "M1 — Runnable browser-to-database flow"
+  },
+  {
+    "id": "B09",
+    "number": 9,
+    "title": "Implement classified retries, Retry-After, and a total job deadline",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/9",
+    "milestone": "M2 — Recovery and correctness"
+  },
+  {
+    "id": "B10",
+    "number": 10,
+    "title": "Support browser login and bounded recovery from session expiry",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/10",
+    "milestone": "M2 — Recovery and correctness"
+  },
+  {
+    "id": "B11",
+    "number": 11,
+    "title": "Handle selector changes with explicit and observable fallback rules",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/11",
+    "milestone": "M2 — Recovery and correctness"
+  },
+  {
+    "id": "B12",
+    "number": 12,
+    "title": "Validate extracted data and detect silent corruption",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/12",
+    "milestone": "M2 — Recovery and correctness"
+  },
+  {
+    "id": "B13",
+    "number": 13,
+    "title": "Resume failed jobs from durable checkpoints with explicit continuation semantics",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/13",
+    "milestone": "M2 — Recovery and correctness"
+  },
+  {
+    "id": "B14",
+    "number": 14,
+    "title": "Prove recovery after forced process termination",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/14",
+    "milestone": "M2 — Recovery and correctness"
+  },
+  {
+    "id": "B15",
+    "number": 15,
+    "title": "Define job identity, idempotent redelivery, and local database ownership",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/15",
+    "milestone": "M2 — Recovery and correctness"
+  },
+  {
+    "id": "B16",
+    "number": 16,
+    "title": "Add bounded job intake, concurrency, and backpressure",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/16",
+    "milestone": "M3 — Controlled execution and diagnostics"
+  },
+  {
+    "id": "B17",
+    "number": 17,
+    "title": "Pace target operations and coordinate rate-limit cooldowns",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/17",
+    "milestone": "M3 — Controlled execution and diagnostics"
+  },
+  {
+    "id": "B18",
+    "number": 18,
+    "title": "Implement graceful shutdown and cancellation across asynchronous boundaries",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/18",
+    "milestone": "M3 — Controlled execution and diagnostics"
+  },
+  {
+    "id": "B19",
+    "number": 19,
+    "title": "Recover from browser or context loss within a finite restart budget",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/19",
+    "milestone": "M3 — Controlled execution and diagnostics"
+  },
+  {
+    "id": "B20",
+    "number": 20,
+    "title": "Add structured execution events and useful operational summaries",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/20",
+    "milestone": "M3 — Controlled execution and diagnostics"
+  },
+  {
+    "id": "B21",
+    "number": 21,
+    "title": "Capture bounded failure artifacts and document their privacy limits",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/21",
+    "milestone": "M3 — Controlled execution and diagnostics"
+  },
+  {
+    "id": "B22",
+    "number": 22,
+    "title": "Generate Gauntlet evidence from actual runtime observations",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/22",
+    "milestone": "M4 — Reproducible evidence"
+  },
+  {
+    "id": "B23",
+    "number": 23,
+    "title": "Verify Gauntlet levels 1–5 with live browser evidence",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/23",
+    "milestone": "M4 — Reproducible evidence"
+  },
+  {
+    "id": "B24",
+    "number": 24,
+    "title": "Verify Gauntlet levels 6–8 with restart and session recovery evidence",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/24",
+    "milestone": "M4 — Reproducible evidence"
+  },
+  {
+    "id": "B25",
+    "number": 25,
+    "title": "Verify Gauntlet levels 9–10 under composite failures",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/25",
+    "milestone": "M4 — Reproducible evidence"
+  },
+  {
+    "id": "B26",
+    "number": 26,
+    "title": "Test failure windows around persistence, deadlines, and shutdown",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/26",
+    "milestone": "M4 — Reproducible evidence"
+  },
+  {
+    "id": "B27",
+    "number": 27,
+    "title": "Run static checks, browser acceptance, and evidence validation in CI",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/27",
+    "milestone": "M4 — Reproducible evidence"
+  },
+  {
+    "id": "B28",
+    "number": 28,
+    "title": "Publish a C# and Python behavioral compatibility matrix",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/28",
+    "milestone": "M5 — Portfolio release"
+  },
+  {
+    "id": "B29",
+    "number": 29,
+    "title": "Document architecture, Python design choices, and guarantee boundaries",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/29",
+    "milestone": "M5 — Portfolio release"
+  },
+  {
+    "id": "B30",
+    "number": 30,
+    "title": "Assemble six executable engineering walkthroughs from the tested worker",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/30",
+    "milestone": "M5 — Portfolio release"
+  },
+  {
+    "id": "B31",
+    "number": 31,
+    "title": "Create a one-command recovery demo and a short visual walkthrough",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/31",
+    "milestone": "M5 — Portfolio release"
+  },
+  {
+    "id": "B32",
+    "number": 32,
+    "title": "Build verified release artifacts and a reproducible release workflow",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/32",
+    "milestone": "M5 — Portfolio release"
+  },
+  {
+    "id": "B33",
+    "number": 33,
+    "title": "Package the portfolio presentation and publish the first documented release",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/33",
+    "milestone": "M5 — Portfolio release"
+  },
+  {
+    "id": "B34",
+    "number": 34,
+    "title": "Measure throughput, resource use, and recovery cost under controlled workloads",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/34",
+    "milestone": "M6 — Optional extensions"
+  },
+  {
+    "id": "B35",
+    "number": 35,
+    "title": "Add a second controlled target adapter to test architectural portability",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/35",
+    "milestone": "M6 — Optional extensions"
+  },
+  {
+    "id": "B36",
+    "number": 36,
+    "title": "Add an explicit HTTP-versus-browser tradeoff case study",
+    "url": "https://github.com/bockuden/resilient-browser-automation-python/issues/36",
+    "milestone": "M6 — Optional extensions"
+  }
+]
