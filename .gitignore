@@ -9,15 +9,24 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.pytype/
+.dmypy.json
 .coverage
 htmlcov/
+coverage.xml
 
 # Local configuration and credentials
 .env
 .env.*
 !.env.example
 playwright/.auth/
+.playwright/
+ms-playwright/
 storage-state*.json
+auth.json
 
 # Runtime state and browser evidence
 artifacts/
@@ -26,8 +35,10 @@ playwright-report/
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
 *.sqlite
 *.sqlite3
+*.sqlite-*
 *.log
 
 # Editor and OS metadata
