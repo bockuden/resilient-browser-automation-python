@@ -2,8 +2,9 @@
 
 **Browser automation designed around correct data, bounded recovery, and reproducible evidence.**
 
+[![Python package checks](https://github.com/bockuden/resilient-browser-automation-python/actions/workflows/python-package.yml/badge.svg)](https://github.com/bockuden/resilient-browser-automation-python/actions/workflows/python-package.yml)
 [![Status: Planning](https://img.shields.io/badge/status-planning-FBCA04)](#project-status)
-[![Python](https://img.shields.io/badge/Python-planned-3776AB?logo=python&logoColor=white)](#planned-stack)
+[![Python 3.11–3.14](https://img.shields.io/badge/Python-3.11--3.14-3776AB?logo=python&logoColor=white)](#planned-stack)
 [![Playwright](https://img.shields.io/badge/Playwright-async_API-2EAD33)](#planned-stack)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Open issues](https://img.shields.io/github/issues/bockuden/resilient-browser-automation-python)](https://github.com/bockuden/resilient-browser-automation-python/issues)
