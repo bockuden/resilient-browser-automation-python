@@ -21,13 +21,11 @@ the decisions behind reliable web data extraction.
 
 ## Project status
 
-**Planning — implementation has not started.** This repository currently contains
-the project roadmap, MIT license, and 36 published implementation issues across
-six milestones. The capabilities and architecture below are planned.
+**Planning — the worker is under development.** The initial installable package
+and CLI help command are in place. Browser extraction, persistence, recovery,
+and diagnostics are planned and not available as a working worker yet.
 
-There is no runnable worker, published Python package, or passing CI claim yet.
-Installation and demo commands will be added when the first working slice is
-available. Start with
+There is no published Python package release or passing CI claim yet. Start with
 [issue #1: package and development toolchain](https://github.com/bockuden/resilient-browser-automation-python/issues/1)
 or browse the
 [milestones](https://github.com/bockuden/resilient-browser-automation-python/milestones).
@@ -131,15 +129,13 @@ modules rather than a separate tutorial implementation.
 
 ## Planned stack
 
-- **Python / asyncio** — orchestration, bounded work, and cancellation.
-- **Playwright / Chromium** — real browser interaction and diagnostic capture.
-- **SQLite** — local job state, deduplication, and transactional checkpoints.
-- **pytest** — unit, integration, subprocess, and browser acceptance tests.
-- **Ruff and a static type checker** — code quality and explicit interfaces.
-- **Docker and GitHub Actions** — reproducible targets and automated validation.
+- **Python 3.11–3.14** — supported runtime range; Python 3.13 is the local default.
+- **uv** — dependency groups, virtual environments, and a committed lockfile.
+- **pytest, Ruff, and mypy** — planned test, lint, formatting, and type-check tools.
+- **Playwright / Chromium, SQLite, Docker, and GitHub Actions** — planned worker and integration infrastructure.
 
-Supported Python versions, dependency pins, and the type checker will be chosen
-in [B01 / issue #1](https://github.com/bockuden/resilient-browser-automation-python/issues/1).
+The package currently exposes `--help` and `--version`. Worker commands will be
+added as their functionality is implemented.
 
 ## Roadmap
 
