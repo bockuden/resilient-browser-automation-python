@@ -144,7 +144,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and
 its development tools:
 
 ```powershell
-uv sync --all-groups
+uv sync --locked --all-groups
 ```
 
 Run the CLI and the project checks:
