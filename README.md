@@ -137,6 +137,30 @@ modules rather than a separate tutorial implementation.
 The package currently exposes `--help` and `--version`. Worker commands will be
 added as their functionality is implemented.
 
+## Development
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and
+[Python 3.11–3.14](https://www.python.org/downloads/), then sync the project and
+its development tools:
+
+```powershell
+uv sync --all-groups
+```
+
+Run the CLI and the project checks:
+
+```powershell
+uv run --locked resilient-browser-automation --help
+uv run --locked pytest
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked mypy src tests
+```
+
+The commands above use the committed `uv.lock` so contributors get the same
+resolved versions. After intentionally changing dependency constraints, refresh
+that lockfile with `uv lock` and verify it with `uv lock --check`.
+
 ## Roadmap
 
 | Milestone | Issues | Completion goal |
