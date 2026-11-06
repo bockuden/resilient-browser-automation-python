@@ -180,6 +180,23 @@ share a container or reset each other's scenario state. The stand's scenario
 state is isolated further by a unique `run_id` per test case. Its container
 uses ephemeral storage and is removed when stopped.
 
+Stand-backed pytest cases can request the `test_run` fixture. It provides a
+fresh `run_id`, a scenario URL builder, and a per-case directory under pytest's
+`tmp_path`; use `test_run.database_path` for temporary consumer state:
+
+```python
+def test_transient_recovery(test_run):
+    url = test_run.scenario_url("transient", fail_for=2)
+```
+
+`test_run` starts the session-scoped stand on first use. Pytest stops only the
+container it started after the session ends. For example, run a selected
+integration test with:
+
+```powershell
+uv run --locked pytest tests/integration -m integration
+```
+
 The commands above use the committed `uv.lock` so contributors get the same
 resolved versions. After intentionally changing dependency constraints, refresh
 that lockfile with `uv lock` and verify it with `uv lock --check`.
