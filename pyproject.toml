@@ -37,8 +37,9 @@ dev = [
 packages = ["src/resilient_browser_automation"]
 
 [tool.pytest.ini_options]
-addopts = "-ra --strict-markers --strict-config"
+addopts = "-ra --strict-markers --strict-config -m 'not integration'"
 testpaths = ["tests"]
+markers = ["integration: requires Docker and the pinned Test Stand image"]
 
 [tool.ruff]
 target-version = "py311"

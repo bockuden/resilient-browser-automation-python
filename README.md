@@ -190,8 +190,12 @@ def test_transient_recovery(test_run):
 ```
 
 `test_run` starts the session-scoped stand on first use. Pytest stops only the
-container it started after the session ends. For example, run a selected
-integration test with:
+container it started after the session ends. `test_run.run_id` stays fixed for
+every URL built from that fixture. A test that restarts its worker can attach to
+the same scenario and storage by calling `resume_test_run(base_url, run_id,
+storage_dir)` with the values retained alongside its checkpoint; this does not
+reset the stand. For example, run the integration checks against the live
+container with:
 
 ```powershell
 uv run --locked pytest tests/integration -m integration
