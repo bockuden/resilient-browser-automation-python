@@ -158,6 +158,28 @@ uv run --locked ruff format --check .
 uv run --locked mypy src tests
 ```
 
+### Start the integration Test Stand
+
+Docker must be running. The harness starts the released Test Stand `1.2.0`
+using its pinned OCI image digest, binds it to an ephemeral localhost port, and
+waits for `GET /health` before reporting the base URL:
+
+```powershell
+uv run --locked python -m resilient_browser_automation.test_stand up
+```
+
+The command prints the container name, base URL, version, and image reference.
+Stop only that harness-owned container with the printed command:
+
+```powershell
+uv run --locked python -m resilient_browser_automation.test_stand down rba-test-stand-<name>
+```
+
+Each invocation gets its own container and host port, so concurrent runs do not
+share a container or reset each other's scenario state. The stand's scenario
+state is isolated further by a unique `run_id` per test case. Its container
+uses ephemeral storage and is removed when stopped.
+
 The commands above use the committed `uv.lock` so contributors get the same
 resolved versions. After intentionally changing dependency constraints, refresh
 that lockfile with `uv lock` and verify it with `uv lock --check`.
