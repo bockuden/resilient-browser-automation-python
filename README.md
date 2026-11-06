@@ -158,6 +158,51 @@ uv run --locked ruff format --check .
 uv run --locked mypy src tests
 ```
 
+### Start the integration Test Stand
+
+Docker must be running. The harness starts the released Test Stand `1.2.0`
+using its pinned OCI image digest, binds it to an ephemeral localhost port, and
+waits for `GET /health` before reporting the base URL:
+
+```powershell
+uv run --locked python -m resilient_browser_automation.test_stand up
+```
+
+The command prints the container name, base URL, version, and image reference.
+Stop only that harness-owned container with the printed command:
+
+```powershell
+uv run --locked python -m resilient_browser_automation.test_stand down rba-test-stand-<name>
+```
+
+Each invocation gets its own container and host port, so concurrent runs do not
+share a container or reset each other's scenario state. The stand's scenario
+state is isolated further by a unique `run_id` per test case. Its container
+uses ephemeral storage and is removed when stopped. Pytest cleanup verifies a
+harness ownership label before stopping a container; the helper exposes no
+reset operation, and its scenario URLs reject a caller-supplied shared `run_id`.
+
+Stand-backed pytest cases can request the `test_run` fixture. It provides a
+fresh `run_id`, a scenario URL builder, and a per-case directory under pytest's
+`tmp_path`; use `test_run.database_path` for temporary consumer state:
+
+```python
+def test_transient_recovery(test_run):
+    url = test_run.scenario_url("transient", fail_for=2)
+```
+
+`test_run` starts the session-scoped stand on first use. Pytest stops only the
+container it started after the session ends. `test_run.run_id` stays fixed for
+every URL built from that fixture. A test that restarts its worker can attach to
+the same scenario and storage by calling `resume_test_run(base_url, run_id,
+storage_dir)` with the values retained alongside its checkpoint; this does not
+reset the stand. For example, run the integration checks against the live
+container with:
+
+```powershell
+uv run --locked pytest tests/integration -m integration
+```
+
 The commands above use the committed `uv.lock` so contributors get the same
 resolved versions. After intentionally changing dependency constraints, refresh
 that lockfile with `uv lock` and verify it with `uv lock --check`.
