@@ -10,6 +10,8 @@ import pytest
 
 from resilient_browser_automation.test_runs import TestRun as RunContext
 from resilient_browser_automation.test_runs import resume_test_run
+from resilient_browser_automation.test_stand import StandInstance as Stand
+from resilient_browser_automation.test_stand import start_stand, stop_stand
 
 pytestmark = pytest.mark.integration
 
@@ -36,3 +38,17 @@ def test_retry_and_reattachment_preserve_run_state(test_run: RunContext) -> None
     assert json.loads(retry_body)["attempt"] == 2
     assert resumed.run_id == test_run.run_id
     assert resumed.database_path == test_run.database_path
+
+
+def test_parallel_harness_instances_do_not_stop_each_other(stand_instance: Stand) -> None:
+    first = stand_instance
+    second = start_stand()
+    try:
+        assert second.container_name != first.container_name
+        assert second.base_url != first.base_url
+        assert _get_status(f"{first.base_url}/health")[0] == 200
+        assert _get_status(f"{second.base_url}/health")[0] == 200
+    finally:
+        stop_stand(second.container_name)
+
+    assert _get_status(f"{first.base_url}/health")[0] == 200

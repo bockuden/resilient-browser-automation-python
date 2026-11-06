@@ -133,8 +133,8 @@ def _command() -> int:
         instance = start_stand()
         print(json.dumps(asdict(instance), indent=2))
         print(
-            "Stop this instance with: resilient-browser-automation-test-stand down "
-            + instance.container_name
+            "Stop this instance with: uv run --locked python -m "
+            f"resilient_browser_automation.test_stand down {instance.container_name}"
         )
         return 0
     stop_stand(args.container_name)

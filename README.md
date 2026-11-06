@@ -178,7 +178,9 @@ uv run --locked python -m resilient_browser_automation.test_stand down rba-test-
 Each invocation gets its own container and host port, so concurrent runs do not
 share a container or reset each other's scenario state. The stand's scenario
 state is isolated further by a unique `run_id` per test case. Its container
-uses ephemeral storage and is removed when stopped.
+uses ephemeral storage and is removed when stopped. Pytest cleanup verifies a
+harness ownership label before stopping a container; the helper exposes no
+reset operation, and its scenario URLs reject a caller-supplied shared `run_id`.
 
 Stand-backed pytest cases can request the `test_run` fixture. It provides a
 fresh `run_id`, a scenario URL builder, and a per-case directory under pytest's
