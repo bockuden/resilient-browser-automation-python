@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
+from resilient_browser_automation.errors import ErrorCode
+
 
 class JobOutcome(StrEnum):
     """Terminal state reported for one job."""
@@ -32,7 +34,7 @@ class JobResult:
     outcome: JobOutcome
     pages_completed: int = 0
     records_collected: int = 0
-    error_code: str | None = None
+    error_code: ErrorCode | None = None
 
     def __post_init__(self) -> None:
         if not self.job_id.strip():
@@ -41,8 +43,8 @@ class JobResult:
             raise ValueError("outcome must be a JobOutcome")
         _require_nonnegative_integer(self.pages_completed, "pages_completed")
         _require_nonnegative_integer(self.records_collected, "records_collected")
-        if self.error_code is not None and not self.error_code.strip():
-            raise ValueError("error_code must be omitted or non-empty")
+        if self.error_code is not None and not isinstance(self.error_code, ErrorCode):
+            raise ValueError("error_code must be an ErrorCode")
 
     @property
     def exit_code(self) -> ExitCode:
