@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from urllib.parse import SplitResult, urlsplit
 
@@ -21,11 +22,15 @@ class TargetConfig:
     password: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
-        if not self.name.strip():
+        if not isinstance(self.name, str) or not self.name.strip():
             raise ConfigurationError("target name must not be empty")
         _validate_http_url(self.base_url, "target base URL", allow_query=False)
         if (self.username is None) != (self.password is None):
             raise ConfigurationError("target username and password must be configured together")
+        if self.username is not None and not isinstance(self.username, str):
+            raise ConfigurationError("target credentials must be strings")
+        if self.password is not None and not isinstance(self.password, str):
+            raise ConfigurationError("target credentials must be strings")
         if self.username == "" or self.password == "":
             raise ConfigurationError("target credentials must not be empty")
 
@@ -40,7 +45,7 @@ class JobSpec:
     page_limit: int
 
     def __post_init__(self) -> None:
-        if not self.job_id.strip():
+        if not isinstance(self.job_id, str) or not self.job_id.strip():
             raise ConfigurationError("job_id must not be empty")
         if not isinstance(self.target, TargetConfig):
             raise ConfigurationError("job target must be a TargetConfig")
@@ -92,13 +97,51 @@ class WorkerConfig:
             raise ConfigurationError("retry must be a RetrySettings instance")
 
 
+def resolve_settings(
+    *,
+    defaults: Mapping[str, object],
+    file_settings: Mapping[str, object],
+    environment_settings: Mapping[str, object],
+    command_line_settings: Mapping[str, object],
+) -> dict[str, object]:
+    """Merge normalized settings from lowest to highest precedence."""
+
+    resolved = dict(defaults)
+    resolved.update(file_settings)
+    resolved.update(environment_settings)
+    resolved.update(command_line_settings)
+    return resolved
+
+
+def format_configuration_diagnostics(job: JobSpec, worker: WorkerConfig) -> str:
+    """Format a useful summary without including URLs or credential values."""
+
+    return "\n".join(
+        (
+            f"job_id={job.job_id}",
+            f"target={job.target.name}",
+            f"page_limit={job.page_limit}",
+            f"operation_timeout_seconds={worker.operation_timeout_seconds:g}",
+            f"job_timeout_seconds={worker.job_timeout_seconds:g}",
+            f"retry_max_attempts={worker.retry.max_attempts}",
+            f"retry_initial_delay_seconds={worker.retry.initial_delay_seconds:g}",
+            f"retry_max_delay_seconds={worker.retry.max_delay_seconds:g}",
+        )
+    )
+
+
 def _validate_http_url(value: str, label: str, *, allow_query: bool) -> SplitResult:
-    if not isinstance(value, str) or not value or value != value.strip():
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or any(character.isspace() for character in value)
+    ):
         raise ConfigurationError(f"{label} must be an absolute HTTP or HTTPS URL")
     try:
         parsed = urlsplit(value)
         hostname = parsed.hostname
-        _ = parsed.port
+        port = parsed.port
     except ValueError as error:
         raise ConfigurationError(f"{label} is malformed") from error
     if parsed.scheme.lower() not in {"http", "https"} or not hostname:
@@ -107,6 +150,8 @@ def _validate_http_url(value: str, label: str, *, allow_query: bool) -> SplitRes
         raise ConfigurationError(f"{label} must not embed credentials")
     if parsed.fragment:
         raise ConfigurationError(f"{label} must not contain a fragment")
+    if port == 0:
+        raise ConfigurationError(f"{label} must use a port between 1 and 65535")
     if not allow_query and parsed.query:
         raise ConfigurationError(f"{label} must not contain a query string")
     return parsed

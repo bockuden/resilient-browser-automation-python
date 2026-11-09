@@ -84,6 +84,39 @@ The Python design will share useful behavioral guarantees with the C# companion
 while using Python's own async resource management, cancellation, typing, and
 testing conventions.
 
+## Job and configuration contract
+
+`JobSpec` contains a stable job ID, a target configuration, the target URL, and
+a positive page limit. `TargetConfig` owns target-specific settings such as its
+base URL and optional credentials. `WorkerConfig` owns operation and total job
+timeouts plus `RetrySettings`. These immutable models validate URLs, origins,
+limits, and incompatible time budgets at construction time, before a browser
+can be created.
+
+When the same setting appears in multiple sources, values resolve in this
+order, from lowest to highest priority: built-in defaults, configuration file,
+environment, then explicit command-line values. Callers pass normalized
+environment settings to `resolve_settings`; the helper does not read or log the
+process environment itself.
+
+Configuration diagnostics report job and target names, limits, timeouts, and
+retry budgets. They intentionally omit target URLs and credentials. Target
+credentials are excluded from model representations as well.
+
+Jobs report one of four terminal outcomes with stable process exit codes:
+
+| Outcome | Exit code |
+| --- | ---: |
+| `completed` | 0 |
+| `failed` | 1 |
+| `incomplete` | 2 |
+| `cancelled` | 130 |
+
+Expected operational failures use distinct codes: transient target failures
+are retryable, while authentication, extraction-contract, and storage failures
+are classified separately and are not retried by default. These types define
+the worker contract; browser execution is being added in subsequent issues.
+
 ## How correctness will be demonstrated
 
 The worker will run against the independently released

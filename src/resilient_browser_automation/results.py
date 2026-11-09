@@ -37,7 +37,7 @@ class JobResult:
     error_code: ErrorCode | None = None
 
     def __post_init__(self) -> None:
-        if not self.job_id.strip():
+        if not isinstance(self.job_id, str) or not self.job_id.strip():
             raise ValueError("job_id must not be empty")
         if not isinstance(self.outcome, JobOutcome):
             raise ValueError("outcome must be a JobOutcome")
