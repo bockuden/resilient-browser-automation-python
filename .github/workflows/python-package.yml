@@ -35,6 +35,9 @@ jobs:
       - name: Verify locked environment
         run: uv sync --locked --all-groups
 
+      - name: Install Chromium and system dependencies
+        run: uv run --locked python -m playwright install --with-deps chromium
+
       - name: Run Test Stand integration tests
         run: uv run --locked pytest tests/integration -m integration
 
