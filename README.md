@@ -135,6 +135,11 @@ Use one manager per worker session and one job scope per active job. The
 integration suite opens the local Test Stand with Chromium and checks context
 isolation without relying on third-party websites.
 
+If a job operation fails while resources are closing, that operation error
+remains the raised exception. Cleanup failures are attached as exception notes;
+all owned resources still receive a cleanup attempt. On normal exit, a cleanup
+failure is raised after the remaining resources have been closed.
+
 ## How correctness will be demonstrated
 
 The worker will run against the independently released

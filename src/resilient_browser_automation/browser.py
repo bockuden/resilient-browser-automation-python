@@ -51,12 +51,17 @@ class BrowserJob:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool:
-        del exc_type, exc, traceback
+        del exc_type, traceback
         context = self._context
         self._context = None
         self._page = None
         if context is not None:
-            await context.close()
+            try:
+                await context.close()
+            except BaseException as cleanup_error:
+                if exc is None:
+                    raise
+                _add_cleanup_note(exc, cleanup_error, "job browser context")
         return False
 
 
@@ -100,24 +105,48 @@ class BrowserManager:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool:
-        del exc_type, exc, traceback
+        del exc_type, traceback
         browser = self._browser
         playwright = self._playwright
         self._browser = None
         self._playwright = None
-        try:
-            if browser is not None:
-                await browser.close()
-        finally:
-            if playwright is not None:
-                await playwright.stop()
+        resources: tuple[tuple[str, Callable[[], Awaitable[object | None]]], ...] = tuple(
+            (name, close)
+            for name, close in (
+                ("browser", browser.close if browser is not None else None),
+                ("Playwright driver", playwright.stop if playwright is not None else None),
+            )
+            if close is not None
+        )
+        cleanup_errors: list[tuple[str, BaseException]] = []
+        for name, close in resources:
+            try:
+                await close()
+            except BaseException as cleanup_error:
+                if exc is not None:
+                    _add_cleanup_note(exc, cleanup_error, name)
+                else:
+                    cleanup_errors.append((name, cleanup_error))
+        if exc is None and cleanup_errors:
+            primary_error = cleanup_errors[0][1]
+            for name, secondary_error in cleanup_errors[1:]:
+                _add_cleanup_note(primary_error, secondary_error, name)
+            raise primary_error
         return False
 
 
 async def _cleanup_preserving_error(
-    cleanup: Callable[[], Awaitable[object]], original_error: BaseException
+    cleanup: Callable[[], Awaitable[object | None]], original_error: BaseException
 ) -> None:
     try:
         await cleanup()
     except BaseException as cleanup_error:
-        original_error.add_note(f"Resource cleanup also failed ({type(cleanup_error).__name__}).")
+        _add_cleanup_note(original_error, cleanup_error, "partially initialized resource")
+
+
+def _add_cleanup_note(
+    original_error: BaseException, cleanup_error: BaseException, resource_name: str
+) -> None:
+    original_error.add_note(
+        f"Cleanup of {resource_name} also failed ({type(cleanup_error).__name__})."
+    )

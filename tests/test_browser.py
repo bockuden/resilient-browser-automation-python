@@ -21,8 +21,14 @@ class FakePage:
 
 
 class FakeContext:
-    def __init__(self, *, page_error: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        page_error: BaseException | None = None,
+        close_error: BaseException | None = None,
+    ) -> None:
         self.page_error = page_error
+        self.close_error = close_error
         self.closed = False
 
     async def new_page(self) -> Page:
@@ -32,14 +38,23 @@ class FakeContext:
 
     async def close(self) -> None:
         self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
 
 
 class FakeBrowser:
-    def __init__(self, context: FakeContext) -> None:
+    def __init__(self, context: FakeContext, *, close_error: BaseException | None = None) -> None:
         self.context = context
+        self.close_error = close_error
+        self.closed = False
 
     async def new_context(self) -> BrowserContext:
         return cast(BrowserContext, self.context)
+
+    async def close(self) -> None:
+        self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
 
 
 class FakeChromium:
@@ -52,12 +67,17 @@ class FakeChromium:
 
 
 class FakePlaywright:
-    def __init__(self, launch_error: BaseException) -> None:
+    def __init__(
+        self, launch_error: BaseException, *, stop_error: BaseException | None = None
+    ) -> None:
         self.chromium = FakeChromium(launch_error)
+        self.stop_error = stop_error
         self.stopped = False
 
     async def stop(self) -> None:
         self.stopped = True
+        if self.stop_error is not None:
+            raise self.stop_error
 
 
 class FakePlaywrightStarter:
@@ -115,5 +135,52 @@ def test_operation_failure_closes_the_owned_context() -> None:
             async with job:
                 raise failure
         assert context.closed
+
+    asyncio.run(run())
+
+
+def test_context_cleanup_failure_does_not_obscure_operation_failure() -> None:
+    context = FakeContext(close_error=RuntimeError("context cleanup failed"))
+    job = BrowserJob(cast(Browser, FakeBrowser(context)))
+    failure = InitializationFailure("job operation failed")
+
+    async def run() -> None:
+        with pytest.raises(InitializationFailure, match="job operation failed") as raised:
+            async with job:
+                raise failure
+        assert context.closed
+        assert any("job browser context" in note for note in raised.value.__notes__)
+
+    asyncio.run(run())
+
+
+def test_browser_and_driver_cleanup_failures_preserve_operation_error() -> None:
+    context = FakeContext()
+    browser = FakeBrowser(context, close_error=RuntimeError("browser close failed"))
+    playwright = FakePlaywright(
+        InitializationFailure("unused"),
+        stop_error=RuntimeError("driver stop failed"),
+    )
+    manager = BrowserManager()
+    manager._browser = cast(Browser, browser)
+    manager._playwright = cast(Playwright, playwright)
+    failure = InitializationFailure("original operation failure")
+
+    async def run() -> None:
+        with pytest.raises(InitializationFailure, match="original operation failure") as raised:
+            try:
+                raise failure
+            except InitializationFailure as operation_error:
+                await manager.__aexit__(
+                    InitializationFailure,
+                    operation_error,
+                    operation_error.__traceback__,
+                )
+                raise
+        assert browser.closed
+        assert playwright.stopped
+        notes = raised.value.__notes__
+        assert any("browser" in note for note in notes)
+        assert any("Playwright driver" in note for note in notes)
 
     asyncio.run(run())
