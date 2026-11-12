@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from types import TracebackType
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
@@ -35,7 +36,11 @@ class BrowserJob:
         if self._context is not None:
             raise RuntimeError("browser job context is already active")
         context = await self._browser.new_context()
-        page = await context.new_page()
+        try:
+            page = await context.new_page()
+        except BaseException as initialization_error:
+            await _cleanup_preserving_error(context.close, initialization_error)
+            raise
         self._context = context
         self._page = page
         return self
@@ -80,7 +85,11 @@ class BrowserManager:
         if self._playwright is not None or self._browser is not None:
             raise RuntimeError("browser manager is already active")
         playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(headless=self._headless)
+        try:
+            browser = await playwright.chromium.launch(headless=self._headless)
+        except BaseException as initialization_error:
+            await _cleanup_preserving_error(playwright.stop, initialization_error)
+            raise
         self._playwright = playwright
         self._browser = browser
         return self
@@ -103,3 +112,12 @@ class BrowserManager:
             if playwright is not None:
                 await playwright.stop()
         return False
+
+
+async def _cleanup_preserving_error(
+    cleanup: Callable[[], Awaitable[object]], original_error: BaseException
+) -> None:
+    try:
+        await cleanup()
+    except BaseException as cleanup_error:
+        original_error.add_note(f"Resource cleanup also failed ({type(cleanup_error).__name__}).")
