@@ -1,5 +1,6 @@
 """Reliable browser automation tools."""
 
+from resilient_browser_automation.browser import BrowserJob, BrowserManager
 from resilient_browser_automation.config import (
     ConfigurationError,
     JobSpec,
@@ -24,6 +25,8 @@ __version__ = "0.1.0"
 __all__ = [
     "AuthenticationError",
     "AutomationError",
+    "BrowserJob",
+    "BrowserManager",
     "ConfigurationError",
     "ErrorCode",
     "ExitCode",
