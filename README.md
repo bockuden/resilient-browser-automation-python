@@ -115,7 +115,25 @@ Jobs report one of four terminal outcomes with stable process exit codes:
 Expected operational failures use distinct codes: transient target failures
 are retryable, while authentication, extraction-contract, and storage failures
 are classified separately and are not retried by default. These types define
-the worker contract; browser execution is being added in subsequent issues.
+the worker contract; data collection is being added in subsequent issues.
+
+## Browser ownership
+
+`BrowserManager` owns one Playwright driver and one Chromium process. That
+process is shared by the jobs opened through that manager; each call to
+`open_job()` creates a fresh `BrowserContext` and page, so cookies and other
+authentication state are isolated by default. Exiting a job scope closes its
+context, and exiting the manager closes Chromium and Playwright:
+
+```python
+async with BrowserManager() as browser:
+    async with browser.open_job() as job:
+        await job.page.goto("https://example.com/")
+```
+
+Use one manager per worker session and one job scope per active job. The
+integration suite opens the local Test Stand with Chromium and checks context
+isolation without relying on third-party websites.
 
 ## How correctness will be demonstrated
 

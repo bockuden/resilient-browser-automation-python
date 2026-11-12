@@ -37,3 +37,22 @@ def test_chromium_opens_page_and_closes_owned_resources(test_run: RunContext) ->
         assert not browser.is_connected()
 
     asyncio.run(run())
+
+
+def test_job_contexts_do_not_share_authentication_state(test_run: RunContext) -> None:
+    async def run() -> None:
+        async with BrowserManager() as manager:
+            async with manager.open_job() as first_job:
+                await first_job.page.goto(f"{test_run.base_url}/health")
+                await first_job.context.add_cookies(
+                    [{"name": "session", "value": "first-job", "url": test_run.base_url}]
+                )
+
+                async with manager.open_job() as second_job:
+                    first_cookies = await first_job.context.cookies()
+                    second_cookies = await second_job.context.cookies()
+
+                    assert any(cookie["value"] == "first-job" for cookie in first_cookies)
+                    assert second_cookies == []
+
+    asyncio.run(run())
