@@ -82,3 +82,19 @@ def test_catalog_adapter_extracts_records_through_browser_pagination(test_run: R
         )
 
     asyncio.run(run())
+
+
+def test_catalog_adapter_reports_page_limit_separately(test_run: RunContext) -> None:
+    async def run() -> None:
+        async with BrowserManager() as manager:
+            async with manager.open_job() as job:
+                response = await job.page.goto(test_run.scenario_url("success", total_pages=4))
+                assert response is not None and response.status == 200
+
+                result = await CatalogAdapter(job.page).extract(page_limit=2)
+
+        assert result.end_reason is CatalogEndReason.PAGE_LIMIT
+        assert result.pages_collected == 2
+        assert len(result.records) == 10
+
+    asyncio.run(run())

@@ -60,6 +60,8 @@ class CatalogAdapter:
             next_page = self._page.get_by_test_id("next-page")
             if await next_page.count() == 0:
                 return CatalogResult(tuple(records), page_number, CatalogEndReason.NATURAL_END)
+            if page_number == page_limit:
+                return CatalogResult(tuple(records), page_number, CatalogEndReason.PAGE_LIMIT)
 
             await next_page.click()
             page_number += 1
