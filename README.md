@@ -3,7 +3,7 @@
 **Browser automation designed around correct data, bounded recovery, and reproducible evidence.**
 
 [![Python package checks](https://github.com/bockuden/resilient-browser-automation-python/actions/workflows/python-package.yml/badge.svg)](https://github.com/bockuden/resilient-browser-automation-python/actions/workflows/python-package.yml)
-[![Status: Planning](https://img.shields.io/badge/status-planning-FBCA04)](#project-status)
+[![Status: In development](https://img.shields.io/badge/status-in_development-FBCA04)](#project-status)
 [![Python 3.11–3.14](https://img.shields.io/badge/Python-3.11--3.14-3776AB?logo=python&logoColor=white)](#planned-stack)
 [![Playwright](https://img.shields.io/badge/Playwright-async_API-2EAD33)](#planned-stack)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -22,9 +22,9 @@ the decisions behind reliable web data extraction.
 
 ## Project status
 
-**Planning — the worker is under development.** The initial installable package
-and CLI help command are in place. Browser extraction, persistence, recovery,
-and diagnostics are planned and not available as a working worker yet.
+**In development.** The initial package, CLI help, browser lifecycle, and a
+browser-based paginated catalog adapter are implemented. Durable persistence,
+job orchestration, recovery, and diagnostics remain in progress.
 
 There is no published Python package release or passing CI claim yet. Start with
 [issue #1: package and development toolchain](https://github.com/bockuden/resilient-browser-automation-python/issues/1)
@@ -114,8 +114,7 @@ Jobs report one of four terminal outcomes with stable process exit codes:
 
 Expected operational failures use distinct codes: transient target failures
 are retryable, while authentication, extraction-contract, and storage failures
-are classified separately and are not retried by default. These types define
-the worker contract; data collection is being added in subsequent issues.
+are classified separately and are not retried by default.
 
 ## Browser ownership
 
@@ -139,6 +138,34 @@ If a job operation fails while resources are closing, that operation error
 remains the raised exception. Cleanup failures are attached as exception notes;
 all owned resources still receive a cleanup attempt. On normal exit, a cleanup
 failure is raised after the remaining resources have been closed.
+
+## Catalog extraction
+
+`CatalogAdapter` reads stable item IDs, names, decimal prices, and the source
+URL from the rendered page. It waits for the page's observable status and uses
+the next-page button instead of fixed delays. A valid end of catalog and a
+configured page limit have different `CatalogEndReason` values. Loading errors
+raise `TransientTargetError`; missing or ambiguous item and pagination
+structure raises `ExtractionContractError` instead of returning partial empty
+output as success.
+
+```python
+from resilient_browser_automation import BrowserManager, CatalogAdapter
+
+async with BrowserManager() as browser:
+    async with browser.open_job() as job:
+        await job.page.goto("https://example.com/catalog")
+        result = await CatalogAdapter(job.page).extract(page_limit=20)
+
+        for record in result.records:
+            print(record.item_id, record.name, record.price, record.source_url)
+
+        print(result.end_reason, result.pages_collected)
+```
+
+The adapter currently follows the Test Stand's `data-testid` contract
+(`catalog`, `catalog-item`, `item-name`, `item-price`, and `next-page`).
+Target-specific selector configuration is a separate roadmap item.
 
 ## How correctness will be demonstrated
 

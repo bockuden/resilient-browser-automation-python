@@ -137,3 +137,24 @@ def test_catalog_missing_item_marker_is_an_extraction_error(test_run: RunContext
                     await CatalogAdapter(job.page).extract(page_limit=1)
 
     asyncio.run(run())
+
+
+def test_catalog_missing_next_page_marker_is_not_natural_end(test_run: RunContext) -> None:
+    async def run() -> None:
+        async with BrowserManager() as manager:
+            async with manager.open_job() as job:
+                response = await job.page.goto(
+                    test_run.scenario_url(
+                        "selector-failure",
+                        total_pages=3,
+                        selector_failure_target="next_page",
+                        selector_failure_mode="missing",
+                        selector_failure_page=1,
+                    )
+                )
+                assert response is not None and response.status == 200
+
+                with pytest.raises(ExtractionContractError, match="next-page control"):
+                    await CatalogAdapter(job.page).extract(page_limit=3)
+
+    asyncio.run(run())

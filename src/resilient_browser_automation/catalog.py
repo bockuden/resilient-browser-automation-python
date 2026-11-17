@@ -63,7 +63,15 @@ class CatalogAdapter:
             records.extend(await self._read_records())
             next_page = self._page.get_by_test_id("next-page")
             next_count = await next_page.count()
+            visible_controls = self._page.locator("nav button")
+            control_count = await visible_controls.count()
+            if next_count > 1:
+                raise ExtractionContractError("catalog has multiple next-page controls")
             if next_count == 0:
+                if control_count:
+                    raise ExtractionContractError(
+                        "catalog next-page control is missing its required marker"
+                    )
                 return CatalogResult(tuple(records), page_number, CatalogEndReason.NATURAL_END)
             if page_number == page_limit:
                 return CatalogResult(tuple(records), page_number, CatalogEndReason.PAGE_LIMIT)
