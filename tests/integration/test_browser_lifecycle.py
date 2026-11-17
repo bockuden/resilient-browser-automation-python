@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from decimal import Decimal
 
 import pytest
 from playwright.async_api import Browser, BrowserContext, Page
@@ -71,6 +72,9 @@ def test_catalog_adapter_extracts_records_through_browser_pagination(test_run: R
         assert result.pages_collected == 3
         assert [record.item_id for record in result.records] == [
             f"item-{item_id:03d}" for item_id in range(1, 16)
+        ]
+        assert [record.price for record in result.records] == [
+            Decimal(f"{item_id}.99") for item_id in range(1, 16)
         ]
         assert all(
             record.source_url == test_run.scenario_url("success", total_pages=3)
