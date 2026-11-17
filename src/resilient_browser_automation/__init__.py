@@ -1,6 +1,12 @@
 """Reliable browser automation tools."""
 
 from resilient_browser_automation.browser import BrowserJob, BrowserManager
+from resilient_browser_automation.catalog import (
+    CatalogAdapter,
+    CatalogEndReason,
+    CatalogRecord,
+    CatalogResult,
+)
 from resilient_browser_automation.config import (
     ConfigurationError,
     JobSpec,
@@ -27,6 +33,10 @@ __all__ = [
     "AutomationError",
     "BrowserJob",
     "BrowserManager",
+    "CatalogAdapter",
+    "CatalogEndReason",
+    "CatalogRecord",
+    "CatalogResult",
     "ConfigurationError",
     "ErrorCode",
     "ExitCode",
