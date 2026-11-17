@@ -8,7 +8,13 @@ from decimal import Decimal
 import pytest
 from playwright.async_api import Browser, BrowserContext, Page
 
-from resilient_browser_automation import BrowserManager, CatalogAdapter, CatalogEndReason
+from resilient_browser_automation import (
+    BrowserManager,
+    CatalogAdapter,
+    CatalogEndReason,
+    ExtractionContractError,
+    TransientTargetError,
+)
 from resilient_browser_automation.test_runs import TestRun as RunContext
 
 pytestmark = pytest.mark.integration
@@ -96,5 +102,38 @@ def test_catalog_adapter_reports_page_limit_separately(test_run: RunContext) -> 
         assert result.end_reason is CatalogEndReason.PAGE_LIMIT
         assert result.pages_collected == 2
         assert len(result.records) == 10
+
+    asyncio.run(run())
+
+
+def test_catalog_loading_failure_is_not_successful_empty_output(test_run: RunContext) -> None:
+    async def run() -> None:
+        async with BrowserManager() as manager:
+            async with manager.open_job() as job:
+                response = await job.page.goto(test_run.scenario_url("permanent"))
+                assert response is not None and response.status == 200
+
+                with pytest.raises(TransientTargetError, match="HTTP 500"):
+                    await CatalogAdapter(job.page).extract(page_limit=1)
+
+    asyncio.run(run())
+
+
+def test_catalog_missing_item_marker_is_an_extraction_error(test_run: RunContext) -> None:
+    async def run() -> None:
+        async with BrowserManager() as manager:
+            async with manager.open_job() as job:
+                response = await job.page.goto(
+                    test_run.scenario_url(
+                        "selector-failure",
+                        selector_failure_target="item",
+                        selector_failure_mode="missing",
+                        selector_failure_page=1,
+                    )
+                )
+                assert response is not None and response.status == 200
+
+                with pytest.raises(ExtractionContractError, match="item marker"):
+                    await CatalogAdapter(job.page).extract(page_limit=1)
 
     asyncio.run(run())
