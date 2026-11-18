@@ -63,3 +63,18 @@ def test_failed_page_transaction_commits_neither_rows_nor_checkpoint(tmp_path: P
         assert job is not None and job.state is JobState.PENDING
 
     asyncio.run(run())
+
+
+def test_replaying_a_page_does_not_duplicate_persisted_items(tmp_path: Path) -> None:
+    async def run() -> None:
+        store = await _store(tmp_path / "worker.sqlite3")
+        records = (_record("item-001"), _record("item-002"))
+
+        await store.save_page("job-001", 1, records)
+        await store.save_page("job-001", 1, records)
+
+        stored_records = await store.get_records("job-001")
+        assert stored_records == records
+        assert await store.get_checkpoint("job-001") == 1
+
+    asyncio.run(run())
