@@ -179,7 +179,10 @@ class SQLiteStore:
             raise StorageError(f"could not update job {job_id!r}") from error
 
     def _save_page(self, job_id: str, page_number: int, records: tuple[CatalogRecord, ...]) -> None:
-        connection = self._connect()
+        try:
+            connection = self._connect()
+        except sqlite3.Error as error:
+            raise StorageError(f"could not open database for job {job_id!r}") from error
         try:
             connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(

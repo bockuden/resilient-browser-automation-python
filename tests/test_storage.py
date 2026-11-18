@@ -15,7 +15,7 @@ from resilient_browser_automation import (
     StorageError,
     TargetConfig,
 )
-from resilient_browser_automation.storage import JobState, SQLiteStore
+from resilient_browser_automation.storage import JobState, SQLiteStore, StoredJob
 
 
 def _job() -> JobSpec:
@@ -96,5 +96,35 @@ def test_conflicting_item_values_use_last_successful_write(tmp_path: Path) -> No
 
         assert await store.get_records("job-001") == (revised,)
         assert await store.get_checkpoint("job-001") == 2
+
+    asyncio.run(run())
+
+
+def test_real_database_persists_job_metadata_and_schema_version(tmp_path: Path) -> None:
+    async def run() -> None:
+        database = tmp_path / "worker.sqlite3"
+        store = await _store(database)
+        await store.set_job_state("job-001", JobState.RUNNING)
+        await store.save_page("job-001", 3, (_record("item-003"),))
+
+        assert await store.get_job("job-001") == StoredJob(
+            job_id="job-001",
+            target_name="catalog",
+            target_url="https://catalog.example/items?category=books",
+            page_limit=5,
+            state=JobState.RUNNING,
+            checkpoint_page=3,
+        )
+        assert await store.get_records("job-001") == (_record("item-003"),)
+
+        with sqlite3.connect(database) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+            assert connection.execute(
+                "SELECT price, source_url FROM catalog_records WHERE job_id = ? AND item_id = ?",
+                ("job-001", "item-003"),
+            ).fetchone() == (
+                "19.95",
+                "https://catalog.example/items?category=books",
+            )
 
     asyncio.run(run())
