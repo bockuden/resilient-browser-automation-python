@@ -78,3 +78,23 @@ def test_replaying_a_page_does_not_duplicate_persisted_items(tmp_path: Path) -> 
         assert await store.get_checkpoint("job-001") == 1
 
     asyncio.run(run())
+
+
+def test_conflicting_item_values_use_last_successful_write(tmp_path: Path) -> None:
+    async def run() -> None:
+        store = await _store(tmp_path / "worker.sqlite3")
+        original = _record("item-001", "Original name")
+        revised = CatalogRecord(
+            item_id="item-001",
+            name="Revised name",
+            price=Decimal("21.40"),
+            source_url="https://catalog.example/items?page=2",
+        )
+
+        await store.save_page("job-001", 1, (original,))
+        await store.save_page("job-001", 2, (revised,))
+
+        assert await store.get_records("job-001") == (revised,)
+        assert await store.get_checkpoint("job-001") == 2
+
+    asyncio.run(run())
