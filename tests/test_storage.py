@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import threading
 from decimal import Decimal
 from pathlib import Path
 
@@ -126,5 +127,38 @@ def test_real_database_persists_job_metadata_and_schema_version(tmp_path: Path) 
                 "19.95",
                 "https://catalog.example/items?category=books",
             )
+
+    asyncio.run(run())
+
+
+def test_waiting_for_sqlite_lock_does_not_block_the_event_loop(tmp_path: Path) -> None:
+    async def run() -> None:
+        database = tmp_path / "worker.sqlite3"
+        store = await _store(database)
+        lock_acquired = threading.Event()
+        release_lock = threading.Event()
+
+        def hold_write_lock() -> None:
+            with sqlite3.connect(database) as connection:
+                connection.execute("BEGIN EXCLUSIVE")
+                lock_acquired.set()
+                release_lock.wait(timeout=2)
+                connection.rollback()
+
+        lock_thread = threading.Thread(target=hold_write_lock)
+        lock_thread.start()
+        try:
+            assert lock_acquired.wait(timeout=1)
+            pending_write = asyncio.create_task(
+                store.save_page("job-001", 1, (_record("item-001"),))
+            )
+            await asyncio.wait_for(asyncio.sleep(0.05), timeout=0.5)
+            assert not pending_write.done()
+        finally:
+            release_lock.set()
+            lock_thread.join(timeout=1)
+
+        await pending_write
+        assert await store.get_checkpoint("job-001") == 1
 
     asyncio.run(run())
