@@ -76,7 +76,7 @@ flowchart LR
 ```
 
 The runner will own execution rules. The browser adapter will own target
-interaction. Storage will own durable state and transaction boundaries.
+interaction. `SQLiteStore` owns durable job state and page transaction boundaries.
 Target-specific selectors and stand configuration will stay outside the
 general execution logic.
 
@@ -166,6 +166,34 @@ async with BrowserManager() as browser:
 The adapter currently follows the Test Stand's `data-testid` contract
 (`catalog`, `catalog-item`, `item-name`, `item-price`, and `next-page`).
 Target-specific selector configuration is a separate roadmap item.
+
+## SQLite persistence
+
+`SQLiteStore` creates a versioned schema for job state, catalog records, and
+page checkpoints. `save_page()` writes every item and advances the checkpoint
+inside one transaction. A rollback leaves both unchanged. The stable item key
+is `(job_id, item_id)`: replaying a page does not add duplicates, and a
+conflicting successful write replaces the earlier name, price, and source URL.
+Prices are stored as decimal text to retain their exact value.
+
+SQLite operations run through `asyncio.to_thread`, with a short synchronous
+transaction and a connection per operation. A slow database lock therefore
+does not block unrelated browser tasks on the event loop.
+
+```python
+from resilient_browser_automation import JobSpec, JobState, SQLiteStore
+
+store = SQLiteStore("data/automation.sqlite3")
+await store.initialize()
+await store.create_job(job_spec)  # a validated JobSpec
+await store.set_job_state(job_spec.job_id, JobState.RUNNING)
+await store.save_page(job_spec.job_id, page_number=1, records=page_records)
+checkpoint = await store.get_checkpoint(job_spec.job_id)
+```
+
+Storage errors raise `StorageError`. The schema version is recorded with
+SQLite's `user_version` pragma; databases with a newer unsupported schema are
+rejected explicitly.
 
 ## How correctness will be demonstrated
 
