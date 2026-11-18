@@ -25,6 +25,7 @@ from resilient_browser_automation.errors import (
     TransientTargetError,
 )
 from resilient_browser_automation.results import ExitCode, JobOutcome, JobResult
+from resilient_browser_automation.storage import JobState, SQLiteStore, StoredJob
 
 __version__ = "0.1.0"
 
@@ -44,8 +45,11 @@ __all__ = [
     "JobOutcome",
     "JobResult",
     "JobSpec",
+    "JobState",
     "RetrySettings",
     "StorageError",
+    "SQLiteStore",
+    "StoredJob",
     "TargetConfig",
     "TransientTargetError",
     "WorkerConfig",
