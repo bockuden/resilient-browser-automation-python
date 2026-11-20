@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -25,6 +26,32 @@ class CatalogRecord:
     source_url: str
 
 
+@dataclass(frozen=True, slots=True)
+class CatalogSelectors:
+    """Target-provided test IDs and item ID attribute used by the adapter."""
+
+    catalog: str = "catalog"
+    item: str = "catalog-item"
+    item_id_attribute: str = "data-item-id"
+    item_name: str = "item-name"
+    item_price: str = "item-price"
+    next_page: str = "next-page"
+
+    def __post_init__(self) -> None:
+        if any(not value.strip() for value in self.__slots_values()):
+            raise ValueError("catalog selector values must not be empty")
+
+    def __slots_values(self) -> tuple[str, ...]:
+        return (
+            self.catalog,
+            self.item,
+            self.item_id_attribute,
+            self.item_name,
+            self.item_price,
+            self.next_page,
+        )
+
+
 class CatalogEndReason(StrEnum):
     """Why catalog extraction stopped."""
 
@@ -44,13 +71,25 @@ class CatalogResult:
 class CatalogAdapter:
     """Extract catalog items through observable browser interactions."""
 
-    def __init__(self, page: Page, *, readiness_timeout_ms: int = 10_000) -> None:
+    def __init__(
+        self,
+        page: Page,
+        *,
+        selectors: CatalogSelectors = CatalogSelectors(),
+        readiness_timeout_ms: int = 10_000,
+    ) -> None:
         if readiness_timeout_ms <= 0:
             raise ValueError("readiness_timeout_ms must be positive")
         self._page = page
+        self._selectors = selectors
         self._readiness_timeout_ms = readiness_timeout_ms
 
-    async def extract(self, *, page_limit: int) -> CatalogResult:
+    async def extract(
+        self,
+        *,
+        page_limit: int,
+        on_page: Callable[[int, tuple[CatalogRecord, ...]], Awaitable[None]] | None = None,
+    ) -> CatalogResult:
         """Read each loaded page and follow its next-page control."""
 
         if isinstance(page_limit, bool) or not isinstance(page_limit, int) or page_limit <= 0:
@@ -60,8 +99,11 @@ class CatalogAdapter:
         page_number = 1
         while True:
             await self._wait_for_page(page_number)
-            records.extend(await self._read_records())
-            next_page = self._page.get_by_test_id("next-page")
+            page_records = tuple(await self._read_records())
+            records.extend(page_records)
+            if on_page is not None:
+                await on_page(page_number, page_records)
+            next_page = self._page.get_by_test_id(self._selectors.next_page)
             next_count = await next_page.count()
             visible_controls = self._page.locator("nav button")
             control_count = await visible_controls.count()
@@ -86,7 +128,7 @@ class CatalogAdapter:
 
     async def _wait_for_page(self, page_number: int) -> None:
         status = self._page.get_by_role("status")
-        catalog = self._page.get_by_test_id("catalog")
+        catalog = self._page.get_by_test_id(self._selectors.catalog)
         if await status.count() != 1 or await catalog.count() != 1:
             raise ExtractionContractError("catalog page is missing its status or catalog container")
         try:
@@ -108,16 +150,16 @@ class CatalogAdapter:
             raise TransientTargetError(message or f"catalog page {page_number} failed to load")
 
     async def _read_records(self) -> list[CatalogRecord]:
-        catalog = self._page.get_by_test_id("catalog")
-        items = catalog.get_by_test_id("catalog-item")
+        catalog = self._page.get_by_test_id(self._selectors.catalog)
+        items = catalog.get_by_test_id(self._selectors.item)
         if await items.count() == 0 and await catalog.locator(":scope > *").count() > 0:
             raise ExtractionContractError("catalog contains items without the required item marker")
         records: list[CatalogRecord] = []
         for index in range(await items.count()):
             item = items.nth(index)
-            item_id = await item.get_attribute("data-item-id")
-            name = await self._required_text(item, "item-name", "name")
-            raw_price = await self._required_text(item, "item-price", "price")
+            item_id = await item.get_attribute(self._selectors.item_id_attribute)
+            name = await self._required_text(item, self._selectors.item_name, "name")
+            raw_price = await self._required_text(item, self._selectors.item_price, "price")
             if not item_id or not name:
                 raise ExtractionContractError("catalog item is missing its ID or name")
             try:

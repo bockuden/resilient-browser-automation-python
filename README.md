@@ -22,9 +22,10 @@ the decisions behind reliable web data extraction.
 
 ## Project status
 
-**In development.** The initial package, CLI help, browser lifecycle, and a
-browser-based paginated catalog adapter are implemented. Durable persistence,
-job orchestration, recovery, and diagnostics remain in progress.
+**In development.** The package includes a single-job CLI, browser lifecycle,
+paginated catalog extraction, transactional SQLite persistence, and structured
+job summaries. Retry orchestration, recovery, and richer diagnostics remain in
+progress.
 
 There is no published Python package release or passing CI claim yet. Start with
 [issue #1: package and development toolchain](https://github.com/bockuden/resilient-browser-automation-python/issues/1)
@@ -246,8 +247,9 @@ modules rather than a separate tutorial implementation.
 - **pytest, Ruff, and mypy** — planned test, lint, formatting, and type-check tools.
 - **Playwright / Chromium, SQLite, Docker, and GitHub Actions** — planned worker and integration infrastructure.
 
-The package currently exposes `--help` and `--version`. Worker commands will be
-added as their functionality is implemented.
+The `run` command connects a target URL to the catalog adapter and SQLite store.
+It accepts target selectors as options so the worker orchestration does not
+depend on one site's DOM conventions.
 
 ## Development
 
@@ -259,15 +261,33 @@ its development tools:
 uv sync --locked --all-groups
 ```
 
-Run the CLI and the project checks:
+Install Chromium, run a catalog job, and run the project checks:
 
 ```powershell
-uv run --locked resilient-browser-automation --help
+uv run --locked python -m playwright install chromium
+uv run --locked resilient-browser-automation run `
+  --url "https://example.com/catalog" `
+  --job-id "catalog-2026-11-20" `
+  --database "data/catalog.sqlite3" `
+  --page-limit 20 `
+  --output-format json
 uv run --locked pytest
 uv run --locked ruff check .
 uv run --locked ruff format --check .
 uv run --locked mypy src tests
 ```
+
+The command writes each loaded page and its checkpoint together. The final
+summary reports the job ID, outcome, committed page checkpoint, and number of
+unique persisted items. Human output is the default; use
+`--output-format json` for one JSON summary on stdout, with diagnostics kept on
+stderr. Exit status is `0` for complete success, `2` when the page limit leaves
+the job incomplete, `1` for execution failure, `64` for invalid input, and
+`130` for cancellation.
+
+The default selector test IDs match the Test Stand. Supply
+`--catalog-testid`, `--item-testid`, `--item-id-attribute`, `--name-testid`,
+`--price-testid`, and `--next-page-testid` to use another target's markup.
 
 ### Start the integration Test Stand
 
