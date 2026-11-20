@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -40,6 +41,13 @@ def test_cli_runs_catalog_and_persists_records(
     output = capsys.readouterr()
     assert exit_code == 0
     assert output.err == ""
+    summary = json.loads(output.out)
+    assert summary["job_id"] == job_id
+    assert summary["outcome"] == "completed"
+    assert summary["checkpoint_page"] == 2
+    assert summary["pages_committed"] == 2
+    assert summary["item_count"] == 10
+    assert summary["end_reason"] == "natural_end"
 
     async def read_storage() -> None:
         store = SQLiteStore(database)
