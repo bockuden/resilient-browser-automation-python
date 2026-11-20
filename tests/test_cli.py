@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import resilient_browser_automation.cli as cli
-from resilient_browser_automation.cli import main
+from resilient_browser_automation.cli import _write_output, main
 from resilient_browser_automation.storage import JobState, SQLiteStore
 
 
@@ -120,3 +120,31 @@ def test_execution_failure_and_cancellation_have_distinct_exit_codes(
         assert job is not None and job.state is expected_state
 
     asyncio.run(read_state())
+
+
+def test_human_diagnostics_are_separate_from_machine_output(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    summary = {
+        "job_id": "job-001",
+        "target": "catalog",
+        "outcome": "failed",
+        "checkpoint_page": 2,
+        "pages_committed": 2,
+        "item_count": 7,
+        "end_reason": None,
+        "database": "data.sqlite3",
+        "error": "target unavailable",
+    }
+
+    _write_output("json", summary, "target unavailable")
+    machine_output = capsys.readouterr()
+    assert json.loads(machine_output.out) == summary
+    assert machine_output.err == "error: target unavailable\n"
+
+    _write_output("human", summary, "target unavailable")
+    human_output = capsys.readouterr()
+    assert "Outcome: failed" in human_output.out
+    assert "Committed pages: 2" in human_output.out
+    assert not human_output.out.startswith("{")
+    assert human_output.err == "error: target unavailable\n"
