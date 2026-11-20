@@ -9,13 +9,13 @@ import pytest
 
 from resilient_browser_automation.cli import main
 from resilient_browser_automation.storage import JobState, SQLiteStore
-from resilient_browser_automation.test_runs import TestRun
+from resilient_browser_automation.test_runs import TestRun as RunContext
 
 pytestmark = pytest.mark.integration
 
 
 def test_cli_runs_catalog_and_persists_records(
-    test_run: TestRun, capsys: pytest.CaptureFixture[str]
+    test_run: RunContext, capsys: pytest.CaptureFixture[str]
 ) -> None:
     database = test_run.storage_dir / "cli.sqlite3"
     job_id = "cli-success"
