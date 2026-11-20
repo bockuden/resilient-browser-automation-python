@@ -240,7 +240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except _InvalidInputError as error:
         print(f"error: {error}", file=sys.stderr)
         return _INVALID_INPUT
-    except ConfigurationError as error:
+    except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return _INVALID_INPUT
 

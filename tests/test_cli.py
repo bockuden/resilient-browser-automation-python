@@ -50,6 +50,9 @@ def test_invalid_command_input_has_a_distinct_exit_code(
     assert output.out == ""
     assert "--url must be an absolute HTTP or HTTPS URL" in output.err
 
+    assert main(["run", "--url", "https://catalog.example", "--catalog-testid", " "]) == 64
+    assert "catalog selector values must not be empty" in capsys.readouterr().err
+
 
 @pytest.mark.parametrize(
     ("cancel", "expected_code", "expected_outcome", "expected_state"),
