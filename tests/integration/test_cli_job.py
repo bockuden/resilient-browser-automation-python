@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from decimal import Decimal
 
 import pytest
 
@@ -56,5 +57,9 @@ def test_cli_runs_catalog_and_persists_records(
         assert persisted_job is not None and persisted_job.state is JobState.COMPLETED
         assert persisted_job.checkpoint_page == 2
         assert len(records) == 10
+        assert records[0].item_id == "item-001"
+        assert records[0].name == "Catalog item 1"
+        assert records[0].price == Decimal("1.99")
+        assert records[0].source_url == test_run.scenario_url("success", total_pages=2)
 
     asyncio.run(read_storage())
