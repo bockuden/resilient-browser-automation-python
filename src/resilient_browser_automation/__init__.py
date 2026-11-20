@@ -6,6 +6,7 @@ from resilient_browser_automation.catalog import (
     CatalogEndReason,
     CatalogRecord,
     CatalogResult,
+    CatalogSelectors,
 )
 from resilient_browser_automation.config import (
     ConfigurationError,
@@ -38,6 +39,7 @@ __all__ = [
     "CatalogEndReason",
     "CatalogRecord",
     "CatalogResult",
+    "CatalogSelectors",
     "ConfigurationError",
     "ErrorCode",
     "ExitCode",

@@ -72,10 +72,16 @@ def test_catalog_adapter_extracts_records_through_browser_pagination(test_run: R
                 response = await job.page.goto(test_run.scenario_url("success", total_pages=3))
                 assert response is not None and response.status == 200
 
-                result = await CatalogAdapter(job.page).extract(page_limit=3)
+                committed_pages: list[tuple[int, int]] = []
+
+                async def record_page(page_number: int, records: tuple[object, ...]) -> None:
+                    committed_pages.append((page_number, len(records)))
+
+                result = await CatalogAdapter(job.page).extract(page_limit=3, on_page=record_page)
 
         assert result.end_reason is CatalogEndReason.NATURAL_END
         assert result.pages_collected == 3
+        assert committed_pages == [(1, 5), (2, 5), (3, 5)]
         assert [record.item_id for record in result.records] == [
             f"item-{item_id:03d}" for item_id in range(1, 16)
         ]
