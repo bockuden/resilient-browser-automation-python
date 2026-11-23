@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
-from pathlib import Path
+from decimal import Decimal
 
 import pytest
 
+from resilient_browser_automation.storage import JobState, SQLiteStore
 from resilient_browser_automation.test_runs import TestRun as RunContext
 
 pytestmark = pytest.mark.integration
@@ -43,9 +45,7 @@ def _output_text(output: str | bytes | None) -> str:
     return output or "<empty>"
 
 
-def _failure_details(
-    command: list[str], result: subprocess.CompletedProcess[str]
-) -> str:
+def _failure_details(command: list[str], result: subprocess.CompletedProcess[str]) -> str:
     return (
         f"Command: {command!r}\n"
         f"Exit status: {result.returncode}\n"
@@ -91,6 +91,22 @@ def test_cli_runs_catalog_and_persists_records(test_run: RunContext) -> None:
     assert summary["item_count"] == 10, details
     assert summary["end_reason"] == "natural_end", details
 
+    async def assert_persisted_results() -> None:
+        store = SQLiteStore(database)
+        persisted_job = await store.get_job(job_id)
+        records = await store.get_records(job_id)
+        assert persisted_job is not None
+        assert persisted_job.state is JobState.COMPLETED
+        assert persisted_job.checkpoint_page == 2
+        assert tuple(record.item_id for record in records) == tuple(
+            f"item-{number:03}" for number in range(1, 11)
+        )
+        assert records[0].name == "Catalog item 1"
+        assert records[0].price == Decimal("1.99")
+        assert records[0].source_url == scenario_url
+
+    asyncio.run(assert_persisted_results())
+
 
 def test_cli_rejects_invalid_page_limit() -> None:
     arguments = ["run", "--url", "http://127.0.0.1:1/catalog", "--page-limit", "0"]
@@ -102,4 +118,3 @@ def test_cli_rejects_invalid_page_limit() -> None:
     assert result.stdout == "", details
     assert "page-limit" in result.stderr, details
     assert "positive integer" in result.stderr, details
-
