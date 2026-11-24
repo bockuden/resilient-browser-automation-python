@@ -114,8 +114,24 @@ Jobs report one of four terminal outcomes with stable process exit codes:
 | `cancelled` | 130 |
 
 Expected operational failures use distinct codes: transient target failures
-are retryable, while authentication, extraction-contract, and storage failures
-are classified separately and are not retried by default.
+are retryable, while permanent target responses, deadline expiry,
+authentication, extraction-contract, and storage failures are classified
+separately and are not retried.
+
+`RetryPolicy` retries only `TransientTargetError`. Its attempt limit includes
+the first operation; fallback waits use capped exponential backoff with full
+jitter. A valid `Retry-After` delta-seconds value or HTTP-date takes precedence
+over backoff. Invalid or missing headers fall back to the configured backoff.
+HTTP dates are converted using wall-clock UTC; elapsed time and the total job
+deadline use a monotonic clock. If a server-directed wait cannot fit inside the
+remaining deadline, the job fails immediately. Permanent target responses,
+other operational errors, and cancellation are not retried.
+
+The CLI exposes these limits through `--retry-max-attempts`,
+`--retry-initial-delay-seconds`, `--retry-max-delay-seconds`,
+`--retry-multiplier`, `--operation-timeout-seconds`, and
+`--job-timeout-seconds`. For example, `--job-timeout-seconds 20` bounds the
+browser collection attempts and their page commits to twenty seconds.
 
 ## Browser ownership
 

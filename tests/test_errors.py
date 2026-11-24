@@ -9,6 +9,8 @@ from resilient_browser_automation.errors import (
     AutomationError,
     ErrorCode,
     ExtractionContractError,
+    JobDeadlineExceeded,
+    PermanentTargetError,
     StorageError,
     TransientTargetError,
 )
@@ -18,6 +20,8 @@ from resilient_browser_automation.errors import (
     ("error_type", "code", "retryable"),
     [
         (TransientTargetError, ErrorCode.TRANSIENT_TARGET, True),
+        (PermanentTargetError, ErrorCode.PERMANENT_TARGET, False),
+        (JobDeadlineExceeded, ErrorCode.JOB_DEADLINE_EXCEEDED, False),
         (AuthenticationError, ErrorCode.AUTHENTICATION, False),
         (ExtractionContractError, ErrorCode.EXTRACTION_CONTRACT, False),
         (StorageError, ErrorCode.STORAGE, False),

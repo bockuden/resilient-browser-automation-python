@@ -22,10 +22,13 @@ from resilient_browser_automation.errors import (
     AutomationError,
     ErrorCode,
     ExtractionContractError,
+    JobDeadlineExceeded,
+    PermanentTargetError,
     StorageError,
     TransientTargetError,
 )
 from resilient_browser_automation.results import ExitCode, JobOutcome, JobResult
+from resilient_browser_automation.retry import RetryPolicy, parse_retry_after
 from resilient_browser_automation.storage import JobState, SQLiteStore, StoredJob
 
 __version__ = "0.1.0"
@@ -45,10 +48,13 @@ __all__ = [
     "ExitCode",
     "ExtractionContractError",
     "JobOutcome",
+    "JobDeadlineExceeded",
     "JobResult",
     "JobSpec",
     "JobState",
     "RetrySettings",
+    "RetryPolicy",
+    "PermanentTargetError",
     "StorageError",
     "SQLiteStore",
     "StoredJob",
@@ -56,5 +62,6 @@ __all__ = [
     "TransientTargetError",
     "WorkerConfig",
     "format_configuration_diagnostics",
+    "parse_retry_after",
     "resolve_settings",
 ]

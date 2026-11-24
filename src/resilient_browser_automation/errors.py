@@ -9,6 +9,8 @@ class ErrorCode(StrEnum):
     """Stable machine-readable categories attached to job failures."""
 
     TRANSIENT_TARGET = "transient_target"
+    PERMANENT_TARGET = "permanent_target"
+    JOB_DEADLINE_EXCEEDED = "job_deadline_exceeded"
     AUTHENTICATION = "authentication"
     EXTRACTION_CONTRACT = "extraction_contract"
     STORAGE = "storage"
@@ -29,6 +31,24 @@ class TransientTargetError(AutomationError):
 
     code = ErrorCode.TRANSIENT_TARGET
     retryable = True
+
+    def __init__(self, message: str, *, retry_after: str | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class PermanentTargetError(AutomationError):
+    """The target returned a response that should not be repeated."""
+
+    code = ErrorCode.PERMANENT_TARGET
+    retryable = False
+
+
+class JobDeadlineExceeded(AutomationError):
+    """The total execution budget expired before a safe retry could complete."""
+
+    code = ErrorCode.JOB_DEADLINE_EXCEEDED
+    retryable = False
 
 
 class AuthenticationError(AutomationError):

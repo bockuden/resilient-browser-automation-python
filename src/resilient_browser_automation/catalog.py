@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 
-from playwright.async_api import Locator, Page
+from playwright.async_api import Locator, Page, Response
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from resilient_browser_automation.errors import (
     ExtractionContractError,
+    PermanentTargetError,
     TransientTargetError,
 )
 
@@ -83,6 +84,8 @@ class CatalogAdapter:
         self._page = page
         self._selectors = selectors
         self._readiness_timeout_ms = readiness_timeout_ms
+        self._last_error_response: Response | None = None
+        self._page.on("response", self._capture_error_response)
 
     async def extract(
         self,
@@ -127,6 +130,7 @@ class CatalogAdapter:
             page_number += 1
 
     async def _wait_for_page(self, page_number: int) -> None:
+        self._last_error_response = None
         status = self._page.get_by_role("status")
         catalog = self._page.get_by_test_id(self._selectors.catalog)
         if await status.count() != 1 or await catalog.count() != 1:
@@ -147,7 +151,23 @@ class CatalogAdapter:
             ) from error
         if await status.get_attribute("data-state") == "error":
             message = (await status.inner_text()).strip()
-            raise TransientTargetError(message or f"catalog page {page_number} failed to load")
+            retry_after = None
+            if self._last_error_response is not None:
+                if self._last_error_response.status != 429 and not (
+                    500 <= self._last_error_response.status <= 599
+                ):
+                    raise PermanentTargetError(message or "catalog request failed permanently")
+                retry_after = await self._last_error_response.header_value("Retry-After")
+            raise TransientTargetError(
+                message or f"catalog page {page_number} failed to load",
+                retry_after=retry_after,
+            )
+
+    def _capture_error_response(self, response: Response) -> None:
+        if response.request.resource_type not in {"fetch", "xhr"}:
+            return
+        if response.status >= 400:
+            self._last_error_response = response
 
     async def _read_records(self) -> list[CatalogRecord]:
         catalog = self._page.get_by_test_id(self._selectors.catalog)
