@@ -137,6 +137,37 @@ def test_retry_after_that_exceeds_remaining_budget_ends_job_without_sleeping() -
     assert waits == []
 
 
+def test_operation_timeout_is_retryable_when_job_deadline_has_time_left() -> None:
+    attempts = 0
+
+    async def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            await asyncio.sleep(0.05)
+        return "done"
+
+    policy = RetryPolicy(
+        RetrySettings(max_attempts=2, initial_delay_seconds=0.01),
+        job_timeout_seconds=1,
+        operation_timeout_seconds=0.005,
+        random_value=lambda: 0,
+    )
+
+    assert asyncio.run(policy.run(operation)) == "done"
+    assert attempts == 2
+
+
+def test_total_job_deadline_cancels_an_operation() -> None:
+    async def operation() -> None:
+        await asyncio.sleep(1)
+
+    policy = RetryPolicy(RetrySettings(), job_timeout_seconds=0.01)
+
+    with pytest.raises(JobDeadlineExceeded, match="during an operation"):
+        asyncio.run(policy.run(operation))
+
+
 @pytest.mark.parametrize("error", [PermanentTargetError("not found"), asyncio.CancelledError()])
 def test_permanent_errors_and_cancellation_are_never_retried(
     error: BaseException,

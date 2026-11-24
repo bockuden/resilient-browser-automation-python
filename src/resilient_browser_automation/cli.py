@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -16,9 +17,16 @@ from uuid import uuid4
 from resilient_browser_automation import __version__
 from resilient_browser_automation.browser import BrowserManager
 from resilient_browser_automation.catalog import CatalogAdapter, CatalogRecord, CatalogSelectors
-from resilient_browser_automation.config import ConfigurationError, JobSpec, TargetConfig
-from resilient_browser_automation.errors import TransientTargetError
+from resilient_browser_automation.config import (
+    ConfigurationError,
+    JobSpec,
+    RetrySettings,
+    TargetConfig,
+    WorkerConfig,
+)
+from resilient_browser_automation.errors import PermanentTargetError, TransientTargetError
 from resilient_browser_automation.results import JobOutcome
+from resilient_browser_automation.retry import RetryPolicy
 from resilient_browser_automation.storage import JobState, SQLiteStore
 
 _INVALID_INPUT = 64
@@ -43,6 +51,7 @@ class _RunOptions:
     database: Path
     selectors: CatalogSelectors
     output_format: str
+    worker: WorkerConfig
 
 
 def _positive_integer(value: str) -> int:
@@ -52,6 +61,16 @@ def _positive_integer(value: str) -> int:
         raise argparse.ArgumentTypeError("must be a positive integer") from error
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a positive finite number") from error
+    if parsed <= 0 or not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("must be a positive finite number")
     return parsed
 
 
@@ -70,6 +89,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--target-name", default="catalog", help="short target label")
     run.add_argument("--database", type=Path, default=Path("automation.sqlite3"))
     run.add_argument("--page-limit", type=_positive_integer, default=20)
+    run.add_argument("--job-timeout-seconds", type=_positive_float, default=300.0)
+    run.add_argument("--operation-timeout-seconds", type=_positive_float, default=30.0)
+    run.add_argument("--retry-max-attempts", type=_positive_integer, default=3)
+    run.add_argument("--retry-initial-delay-seconds", type=_positive_float, default=0.5)
+    run.add_argument("--retry-max-delay-seconds", type=_positive_float, default=30.0)
+    run.add_argument("--retry-multiplier", type=_positive_float, default=2.0)
     run.add_argument("--output-format", choices=("human", "json"), default="human")
     run.add_argument("--catalog-testid", default="catalog")
     run.add_argument("--item-testid", default="catalog-item")
@@ -106,7 +131,17 @@ def _options_from_args(args: argparse.Namespace) -> _RunOptions:
         item_price=args.price_testid,
         next_page=args.next_page_testid,
     )
-    return _RunOptions(job, args.database, selectors, args.output_format)
+    worker = WorkerConfig(
+        job_timeout_seconds=args.job_timeout_seconds,
+        operation_timeout_seconds=args.operation_timeout_seconds,
+        retry=RetrySettings(
+            max_attempts=args.retry_max_attempts,
+            initial_delay_seconds=args.retry_initial_delay_seconds,
+            max_delay_seconds=args.retry_max_delay_seconds,
+            multiplier=args.retry_multiplier,
+        ),
+    )
+    return _RunOptions(job, args.database, selectors, args.output_format, worker)
 
 
 def _summary(
@@ -147,23 +182,40 @@ async def _execute(options: _RunOptions) -> tuple[int, dict[str, Any], str | Non
         created = True
         await store.set_job_state(job.job_id, JobState.RUNNING)
 
-        async with BrowserManager() as browser:
-            async with browser.open_job() as browser_job:
-                response = await browser_job.page.goto(job.target_url)
-                if response is None or response.status >= 400:
-                    status = "no response" if response is None else f"HTTP {response.status}"
-                    raise TransientTargetError(f"catalog navigation failed: {status}")
+        async def collect_browser_job() -> str:
+            async with BrowserManager() as browser:
+                async with browser.open_job() as browser_job:
+                    response = await browser_job.page.goto(job.target_url)
+                    if response is None:
+                        raise TransientTargetError("catalog navigation returned no response")
+                    if response.status == 429 or 500 <= response.status <= 599:
+                        retry_after = await response.header_value("Retry-After")
+                        raise TransientTargetError(
+                            f"catalog navigation failed: HTTP {response.status}",
+                            retry_after=retry_after,
+                        )
+                    if response.status >= 400:
+                        raise PermanentTargetError(
+                            f"catalog navigation failed: HTTP {response.status}"
+                        )
 
-                async def persist_page(
-                    page_number: int, records: tuple[CatalogRecord, ...]
-                ) -> None:
-                    await store.save_page(job.job_id, page_number, records)
+                    async def persist_page(
+                        page_number: int, records: tuple[CatalogRecord, ...]
+                    ) -> None:
+                        await store.save_page(job.job_id, page_number, records)
 
-                result = await CatalogAdapter(
-                    browser_job.page, selectors=options.selectors
-                ).extract(page_limit=job.page_limit, on_page=persist_page)
-                end_reason = result.end_reason.value
-        if result.end_reason.value == "page_limit":
+                    result = await CatalogAdapter(
+                        browser_job.page, selectors=options.selectors
+                    ).extract(page_limit=job.page_limit, on_page=persist_page)
+                    return result.end_reason.value
+            raise AssertionError("browser job exited without a collection result")
+
+        end_reason = await RetryPolicy(
+            options.worker.retry,
+            job_timeout_seconds=options.worker.job_timeout_seconds,
+            operation_timeout_seconds=options.worker.operation_timeout_seconds,
+        ).run(collect_browser_job)
+        if end_reason == "page_limit":
             outcome = JobOutcome.INCOMPLETE
             exit_code = _INCOMPLETE
             await store.set_job_state(job.job_id, JobState.INCOMPLETE)

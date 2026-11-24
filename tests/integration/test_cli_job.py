@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from decimal import Decimal
+from urllib.request import urlopen
 
 import pytest
 
@@ -118,3 +119,62 @@ def test_cli_rejects_invalid_page_limit() -> None:
     assert result.stdout == "", details
     assert "page-limit" in result.stderr, details
     assert "positive integer" in result.stderr, details
+
+
+@pytest.mark.parametrize(
+    ("scenario", "parameters"),
+    [
+        ("transient", {"fail_for": 2}),
+        ("rate-limit", {"rate_limit_for": 2, "retry_after_seconds": 1}),
+    ],
+)
+def test_cli_recovers_from_classified_503_and_429_responses(
+    test_run: RunContext,
+    scenario: str,
+    parameters: dict[str, int],
+) -> None:
+    database = test_run.storage_dir / f"{scenario}.sqlite3"
+    job_id = f"retry-{scenario}"
+    scenario_url = test_run.scenario_url(scenario, total_pages=1, **parameters)
+    arguments = [
+        "run",
+        "--url",
+        scenario_url,
+        "--job-id",
+        job_id,
+        "--database",
+        str(database),
+        "--page-limit",
+        "1",
+        "--job-timeout-seconds",
+        "30",
+        "--operation-timeout-seconds",
+        "10",
+        "--retry-max-attempts",
+        "3",
+        "--retry-initial-delay-seconds",
+        "0.01",
+        "--retry-max-delay-seconds",
+        "0.1",
+        "--output-format",
+        "json",
+    ]
+    command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    result = _run_cli(arguments)
+    details = _failure_details(command, result)
+
+    assert result.returncode == 0, details
+    summary = json.loads(result.stdout)
+    assert summary["outcome"] == "completed", details
+    assert summary["checkpoint_page"] == 1, details
+    assert summary["item_count"] == 5, details
+
+    api_parameters = {
+        **parameters,
+        "page": 1,
+        "total_pages": 1,
+    }
+    api_url = test_run.scenario_api_url(scenario, **api_parameters)
+    with urlopen(api_url, timeout=5) as response:
+        last_attempt = json.loads(response.read())
+    assert last_attempt["attempt"] == 4

@@ -30,6 +30,7 @@ class RetryPolicy:
         settings: RetrySettings,
         *,
         job_timeout_seconds: float,
+        operation_timeout_seconds: float | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         wall_time: Callable[[], float] = time.time,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -37,8 +38,13 @@ class RetryPolicy:
     ) -> None:
         if not math.isfinite(job_timeout_seconds) or job_timeout_seconds <= 0:
             raise ValueError("job_timeout_seconds must be positive and finite")
+        if operation_timeout_seconds is not None and (
+            not math.isfinite(operation_timeout_seconds) or operation_timeout_seconds <= 0
+        ):
+            raise ValueError("operation_timeout_seconds must be positive and finite")
         self._settings = settings
         self._job_timeout_seconds = job_timeout_seconds
+        self._operation_timeout_seconds = operation_timeout_seconds
         self._monotonic = monotonic
         self._wall_time = wall_time
         self._sleep = sleep
@@ -52,35 +58,43 @@ class RetryPolicy:
             remaining = deadline - self._monotonic()
             if remaining <= 0:
                 raise JobDeadlineExceeded("job deadline exceeded")
-            timeout_scope = asyncio.timeout(remaining)
+            attempt_timeout = remaining
+            if self._operation_timeout_seconds is not None:
+                attempt_timeout = min(attempt_timeout, self._operation_timeout_seconds)
+            timeout_scope = asyncio.timeout(attempt_timeout)
+            retry_error: TransientTargetError | None = None
             try:
                 async with timeout_scope:
                     return await operation()
             except TimeoutError as error:
-                if timeout_scope.expired():
+                if not timeout_scope.expired():
+                    raise
+                if attempt_timeout == remaining:
                     raise JobDeadlineExceeded(
                         "job deadline exceeded during an operation"
                     ) from error
-                raise
             except TransientTargetError as error:
-                if attempt >= self._settings.max_attempts:
-                    raise
-                delay = self._delay_before_retry(attempt, error.retry_after)
-                remaining = deadline - self._monotonic()
-                if delay >= remaining:
+                retry_error = error
+            if retry_error is None:
+                retry_error = TransientTargetError("operation timed out")
+            if attempt >= self._settings.max_attempts:
+                raise retry_error
+            delay = self._delay_before_retry(attempt, retry_error.retry_after)
+            remaining = deadline - self._monotonic()
+            if delay >= remaining:
+                raise JobDeadlineExceeded(
+                    "retry delay exceeds the remaining job deadline"
+                ) from retry_error
+            timeout_scope = asyncio.timeout(remaining)
+            try:
+                async with timeout_scope:
+                    await self._sleep(delay)
+            except TimeoutError as timeout_error:
+                if timeout_scope.expired():
                     raise JobDeadlineExceeded(
-                        "retry delay exceeds the remaining job deadline"
-                    ) from error
-                timeout_scope = asyncio.timeout(remaining)
-                try:
-                    async with timeout_scope:
-                        await self._sleep(delay)
-                except TimeoutError as timeout_error:
-                    if timeout_scope.expired():
-                        raise JobDeadlineExceeded(
-                            "job deadline exceeded while waiting to retry"
-                        ) from timeout_error
-                    raise
+                        "job deadline exceeded while waiting to retry"
+                    ) from timeout_error
+                raise
         raise AssertionError("retry loop exited without a result or exception")
 
     def _delay_before_retry(self, attempt: int, retry_after: str | None) -> float:
