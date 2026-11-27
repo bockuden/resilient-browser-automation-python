@@ -166,12 +166,22 @@ class CatalogAdapter:
                     timeout=self._readiness_timeout_ms,
                 )
             except PlaywrightTimeoutError as error:
+                if _is_login_page(self._page.url) or (
+                    self._last_error_response is not None
+                    and self._last_error_response.status == 401
+                ):
+                    continue
                 raise ExtractionContractError(
                     "catalog page is missing its status or catalog container"
                 ) from error
             if _is_login_page(self._page.url):
                 continue
             if await status.count() != 1 or await catalog.count() != 1:
+                if (
+                    self._last_error_response is not None
+                    and self._last_error_response.status == 401
+                ):
+                    continue
                 raise ExtractionContractError(
                     "catalog page is missing its status or catalog container"
                 )
