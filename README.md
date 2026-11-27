@@ -151,6 +151,12 @@ Use one manager per worker session and one job scope per active job. The
 integration suite opens the local Test Stand with Chromium and checks context
 isolation without relying on third-party websites.
 
+The CLI reads optional target credentials from `RBA_TARGET_USERNAME` and
+`RBA_TARGET_PASSWORD`. When a protected target redirects to its login page, it
+submits the form in the job's browser context. Keep passwords in the process
+environment or a secret manager rather than command arguments or URLs. The
+application does not include credential values in its errors or job summaries.
+
 If a job operation fails while resources are closing, that operation error
 remains the raised exception. Cleanup failures are attached as exception notes;
 all owned resources still receive a cleanup attempt. On normal exit, a cleanup

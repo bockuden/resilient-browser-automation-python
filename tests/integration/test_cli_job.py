@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from decimal import Decimal
@@ -19,19 +20,28 @@ pytestmark = pytest.mark.integration
 _CLI_TIMEOUT_SECONDS = 60
 
 
-def _run_cli(arguments: list[str]) -> subprocess.CompletedProcess[str]:
+def _run_cli(
+    arguments: list[str],
+    *,
+    environment: dict[str, str] | None = None,
+    timeout_seconds: int = _CLI_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    process_environment = os.environ.copy()
+    if environment is not None:
+        process_environment.update(environment)
     try:
         return subprocess.run(
             command,
             capture_output=True,
             check=False,
+            env=process_environment,
             text=True,
-            timeout=_CLI_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
     except subprocess.TimeoutExpired as error:
         pytest.fail(
-            f"CLI exceeded {_CLI_TIMEOUT_SECONDS}s timeout.\n"
+            f"CLI exceeded {timeout_seconds}s timeout.\n"
             f"Command: {command!r}\n"
             f"stdout: {_output_text(error.stdout)}\n"
             f"stderr: {_output_text(error.stderr)}"
@@ -119,6 +129,49 @@ def test_cli_rejects_invalid_page_limit() -> None:
     assert result.stdout == "", details
     assert "page-limit" in result.stderr, details
     assert "positive integer" in result.stderr, details
+
+
+def test_cli_authenticates_before_collecting_protected_catalog(test_run: RunContext) -> None:
+    database = test_run.storage_dir / "protected.sqlite3"
+    job_id = "protected-success"
+    arguments = [
+        "run",
+        "--url",
+        test_run.scenario_url("success", total_pages=3, protected=True),
+        "--job-id",
+        job_id,
+        "--database",
+        str(database),
+        "--page-limit",
+        "3",
+        "--job-timeout-seconds",
+        "180",
+        "--operation-timeout-seconds",
+        "120",
+        "--output-format",
+        "json",
+    ]
+    result = _run_cli(
+        arguments,
+        environment={"RBA_TARGET_USERNAME": "demo", "RBA_TARGET_PASSWORD": "automation"},
+        timeout_seconds=120,
+    )
+    command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    details = _failure_details(command, result)
+
+    assert result.returncode == 0, details
+    summary = json.loads(result.stdout)
+    assert summary["outcome"] == "completed", details
+    assert summary["checkpoint_page"] == 3, details
+    assert summary["item_count"] == 15, details
+
+    async def assert_records() -> None:
+        records = await SQLiteStore(database).get_records(job_id)
+        assert len(records) == 15
+        assert records[0].name == "Catalog item 1"
+        assert records[0].price == Decimal("1.99")
+
+    asyncio.run(assert_records())
 
 
 @pytest.mark.parametrize(

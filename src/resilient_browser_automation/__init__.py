@@ -1,5 +1,6 @@
 """Reliable browser automation tools."""
 
+from resilient_browser_automation.authentication import BrowserAuthenticator
 from resilient_browser_automation.browser import BrowserJob, BrowserManager
 from resilient_browser_automation.catalog import (
     CatalogAdapter,
@@ -36,6 +37,7 @@ __version__ = "0.1.0"
 __all__ = [
     "AuthenticationError",
     "AutomationError",
+    "BrowserAuthenticator",
     "BrowserJob",
     "BrowserManager",
     "CatalogAdapter",
