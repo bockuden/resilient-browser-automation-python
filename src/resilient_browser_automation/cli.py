@@ -228,7 +228,9 @@ async def _execute(options: _RunOptions) -> tuple[int, dict[str, Any], str | Non
                         await store.save_page(job.job_id, page_number, records)
 
                     result = await CatalogAdapter(
-                        browser_job.page, selectors=options.selectors
+                        browser_job.page,
+                        selectors=options.selectors,
+                        on_authentication_required=authenticator.authenticate_if_required,
                     ).extract(page_limit=job.page_limit, on_page=persist_page)
                     return result.end_reason.value
             raise AssertionError("browser job exited without a collection result")

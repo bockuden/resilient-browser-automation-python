@@ -174,6 +174,90 @@ def test_cli_authenticates_before_collecting_protected_catalog(test_run: RunCont
     asyncio.run(assert_records())
 
 
+def test_cli_reports_invalid_credentials_without_exposing_them(test_run: RunContext) -> None:
+    username = "private-test-user"
+    password = "private-test-password"
+    arguments = [
+        "run",
+        "--url",
+        test_run.scenario_url("success", total_pages=1, protected=True),
+        "--job-id",
+        "invalid-auth",
+        "--database",
+        str(test_run.storage_dir / "invalid-auth.sqlite3"),
+        "--page-limit",
+        "1",
+        "--login-max-attempts",
+        "1",
+        "--output-format",
+        "json",
+    ]
+    result = _run_cli(
+        arguments,
+        environment={"RBA_TARGET_USERNAME": username, "RBA_TARGET_PASSWORD": password},
+        timeout_seconds=60,
+    )
+    command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    details = _failure_details(command, result)
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 1, details
+    assert "invalid username or password" in output, details
+    assert username not in output, details
+    assert password not in output, details
+    summary = json.loads(result.stdout)
+    assert summary["outcome"] == "failed", details
+    assert summary["checkpoint_page"] == 0, details
+
+
+def test_cli_reauthenticates_and_resumes_expired_catalog_session(test_run: RunContext) -> None:
+    database = test_run.storage_dir / "session-expiry.sqlite3"
+    job_id = "session-expiry"
+    arguments = [
+        "run",
+        "--url",
+        test_run.scenario_url(
+            "success", total_pages=3, protected=True, expire_session_after_page=1
+        ),
+        "--job-id",
+        job_id,
+        "--database",
+        str(database),
+        "--page-limit",
+        "3",
+        "--job-timeout-seconds",
+        "40",
+        "--operation-timeout-seconds",
+        "30",
+        "--login-max-attempts",
+        "2",
+        "--output-format",
+        "json",
+    ]
+    result = _run_cli(
+        arguments,
+        environment={"RBA_TARGET_USERNAME": "demo", "RBA_TARGET_PASSWORD": "automation"},
+        timeout_seconds=35,
+    )
+    command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    details = _failure_details(command, result)
+
+    assert result.returncode == 0, details
+    summary = json.loads(result.stdout)
+    assert summary["outcome"] == "completed", details
+    assert summary["checkpoint_page"] == 3, details
+    assert summary["item_count"] == 15, details
+
+    async def assert_resumed_records() -> None:
+        records = await SQLiteStore(database).get_records(job_id)
+        assert tuple(record.item_id for record in records) == tuple(
+            f"item-{number:03}" for number in range(1, 16)
+        )
+        assert records[-1].name == "Catalog item 15"
+
+    asyncio.run(assert_resumed_records())
+
+
 @pytest.mark.parametrize(
     ("scenario", "parameters"),
     [
