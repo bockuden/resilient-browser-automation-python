@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from decimal import Decimal
@@ -19,19 +20,28 @@ pytestmark = pytest.mark.integration
 _CLI_TIMEOUT_SECONDS = 60
 
 
-def _run_cli(arguments: list[str]) -> subprocess.CompletedProcess[str]:
+def _run_cli(
+    arguments: list[str],
+    *,
+    environment: dict[str, str] | None = None,
+    timeout_seconds: int = _CLI_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    process_environment = os.environ.copy()
+    if environment is not None:
+        process_environment.update(environment)
     try:
         return subprocess.run(
             command,
             capture_output=True,
             check=False,
+            env=process_environment,
             text=True,
-            timeout=_CLI_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
     except subprocess.TimeoutExpired as error:
         pytest.fail(
-            f"CLI exceeded {_CLI_TIMEOUT_SECONDS}s timeout.\n"
+            f"CLI exceeded {timeout_seconds}s timeout.\n"
             f"Command: {command!r}\n"
             f"stdout: {_output_text(error.stdout)}\n"
             f"stderr: {_output_text(error.stderr)}"
@@ -119,6 +129,133 @@ def test_cli_rejects_invalid_page_limit() -> None:
     assert result.stdout == "", details
     assert "page-limit" in result.stderr, details
     assert "positive integer" in result.stderr, details
+
+
+def test_cli_authenticates_before_collecting_protected_catalog(test_run: RunContext) -> None:
+    database = test_run.storage_dir / "protected.sqlite3"
+    job_id = "protected-success"
+    arguments = [
+        "run",
+        "--url",
+        test_run.scenario_url("success", total_pages=3, protected=True),
+        "--job-id",
+        job_id,
+        "--database",
+        str(database),
+        "--page-limit",
+        "3",
+        "--job-timeout-seconds",
+        "180",
+        "--operation-timeout-seconds",
+        "120",
+        "--output-format",
+        "json",
+    ]
+    result = _run_cli(
+        arguments,
+        environment={"RBA_TARGET_USERNAME": "demo", "RBA_TARGET_PASSWORD": "automation"},
+        timeout_seconds=120,
+    )
+    command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    details = _failure_details(command, result)
+
+    assert result.returncode == 0, details
+    summary = json.loads(result.stdout)
+    assert summary["outcome"] == "completed", details
+    assert summary["checkpoint_page"] == 3, details
+    assert summary["item_count"] == 15, details
+
+    async def assert_records() -> None:
+        records = await SQLiteStore(database).get_records(job_id)
+        assert len(records) == 15
+        assert records[0].name == "Catalog item 1"
+        assert records[0].price == Decimal("1.99")
+
+    asyncio.run(assert_records())
+
+
+def test_cli_reports_invalid_credentials_without_exposing_them(test_run: RunContext) -> None:
+    username = "private-test-user"
+    password = "private-test-password"
+    arguments = [
+        "run",
+        "--url",
+        test_run.scenario_url("success", total_pages=1, protected=True),
+        "--job-id",
+        "invalid-auth",
+        "--database",
+        str(test_run.storage_dir / "invalid-auth.sqlite3"),
+        "--page-limit",
+        "1",
+        "--login-max-attempts",
+        "1",
+        "--output-format",
+        "json",
+    ]
+    result = _run_cli(
+        arguments,
+        environment={"RBA_TARGET_USERNAME": username, "RBA_TARGET_PASSWORD": password},
+        timeout_seconds=60,
+    )
+    command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    details = _failure_details(command, result)
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 1, details
+    assert "invalid username or password" in output, details
+    assert username not in output, details
+    assert password not in output, details
+    summary = json.loads(result.stdout)
+    assert summary["outcome"] == "failed", details
+    assert summary["checkpoint_page"] == 0, details
+
+
+def test_cli_reauthenticates_and_resumes_expired_catalog_session(test_run: RunContext) -> None:
+    database = test_run.storage_dir / "session-expiry.sqlite3"
+    job_id = "session-expiry"
+    arguments = [
+        "run",
+        "--url",
+        test_run.scenario_url(
+            "success", total_pages=3, protected=True, expire_session_after_page=1
+        ),
+        "--job-id",
+        job_id,
+        "--database",
+        str(database),
+        "--page-limit",
+        "3",
+        "--job-timeout-seconds",
+        "40",
+        "--operation-timeout-seconds",
+        "30",
+        "--login-max-attempts",
+        "2",
+        "--output-format",
+        "json",
+    ]
+    result = _run_cli(
+        arguments,
+        environment={"RBA_TARGET_USERNAME": "demo", "RBA_TARGET_PASSWORD": "automation"},
+        timeout_seconds=35,
+    )
+    command = [sys.executable, "-m", "resilient_browser_automation", *arguments]
+    details = _failure_details(command, result)
+
+    assert result.returncode == 0, details
+    summary = json.loads(result.stdout)
+    assert summary["outcome"] == "completed", details
+    assert summary["checkpoint_page"] == 3, details
+    assert summary["item_count"] == 15, details
+
+    async def assert_resumed_records() -> None:
+        records = await SQLiteStore(database).get_records(job_id)
+        assert tuple(record.item_id for record in records) == tuple(
+            f"item-{number:03}" for number in range(1, 16)
+        )
+        assert records[-1].name == "Catalog item 15"
+
+    asyncio.run(assert_resumed_records())
 
 
 @pytest.mark.parametrize(

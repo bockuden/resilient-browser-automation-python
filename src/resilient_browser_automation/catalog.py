@@ -6,11 +6,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
+from urllib.parse import urlsplit
 
 from playwright.async_api import Locator, Page, Response
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from resilient_browser_automation.errors import (
+    AuthenticationError,
     ExtractionContractError,
     PermanentTargetError,
     TransientTargetError,
@@ -78,12 +80,14 @@ class CatalogAdapter:
         *,
         selectors: CatalogSelectors = CatalogSelectors(),
         readiness_timeout_ms: int = 10_000,
+        on_authentication_required: Callable[[Page], Awaitable[None]] | None = None,
     ) -> None:
         if readiness_timeout_ms <= 0:
             raise ValueError("readiness_timeout_ms must be positive")
         self._page = page
         self._selectors = selectors
         self._readiness_timeout_ms = readiness_timeout_ms
+        self._on_authentication_required = on_authentication_required
         self._last_error_response: Response | None = None
         self._page.on("response", self._capture_error_response)
 
@@ -121,6 +125,7 @@ class CatalogAdapter:
             if page_number == page_limit:
                 return CatalogResult(tuple(records), page_number, CatalogEndReason.PAGE_LIMIT)
 
+            self._last_error_response = None
             try:
                 await next_page.click()
             except PlaywrightTimeoutError as error:
@@ -130,38 +135,97 @@ class CatalogAdapter:
             page_number += 1
 
     async def _wait_for_page(self, page_number: int) -> None:
-        self._last_error_response = None
-        status = self._page.get_by_role("status")
-        catalog = self._page.get_by_test_id(self._selectors.catalog)
-        if await status.count() != 1 or await catalog.count() != 1:
-            raise ExtractionContractError("catalog page is missing its status or catalog container")
-        try:
-            await status.wait_for(state="visible", timeout=self._readiness_timeout_ms)
-            await self._page.wait_for_function(
-                "([number]) => { const status = document.querySelector('[role=status]'); "
-                "return status && (status.dataset.state === 'error' || "
-                "(status.dataset.state === 'success' && "
-                "status.textContent.includes(`Page ${number} loaded`))); }",
-                arg=[page_number],
-                timeout=self._readiness_timeout_ms,
-            )
-        except PlaywrightTimeoutError as error:
-            raise TransientTargetError(
-                f"catalog page {page_number} did not become ready in time"
-            ) from error
-        if await status.get_attribute("data-state") == "error":
-            message = (await status.inner_text()).strip()
-            retry_after = None
-            if self._last_error_response is not None:
-                if self._last_error_response.status != 429 and not (
-                    500 <= self._last_error_response.status <= 599
+        while True:
+            if self._last_error_response is not None and self._last_error_response.status == 401:
+                if not _is_login_page(self._page.url):
+                    try:
+                        await self._page.wait_for_url(
+                            "**/login**", timeout=self._readiness_timeout_ms
+                        )
+                    except PlaywrightTimeoutError as error:
+                        raise AuthenticationError(
+                            "target session expired but the login page did not open"
+                        ) from error
+                await self._authenticate()
+                self._last_error_response = None
+                continue
+            if _is_login_page(self._page.url):
+                await self._authenticate()
+                self._last_error_response = None
+                continue
+
+            status = self._page.get_by_role("status")
+            catalog = self._page.get_by_test_id(self._selectors.catalog)
+            try:
+                await self._page.wait_for_function(
+                    "([catalog_id]) => window.location.pathname === '/login' || "
+                    "(document.querySelector('[role=status]') !== null && "
+                    "Array.from(document.querySelectorAll('[data-testid]')).some("
+                    "element => element.dataset.testid === catalog_id))",
+                    arg=[self._selectors.catalog],
+                    timeout=self._readiness_timeout_ms,
+                )
+            except PlaywrightTimeoutError as error:
+                if _is_login_page(self._page.url) or (
+                    self._last_error_response is not None
+                    and self._last_error_response.status == 401
                 ):
-                    raise PermanentTargetError(message or "catalog request failed permanently")
-                retry_after = await self._last_error_response.header_value("Retry-After")
-            raise TransientTargetError(
-                message or f"catalog page {page_number} failed to load",
-                retry_after=retry_after,
-            )
+                    continue
+                raise ExtractionContractError(
+                    "catalog page is missing its status or catalog container"
+                ) from error
+            if _is_login_page(self._page.url):
+                continue
+            if await status.count() != 1 or await catalog.count() != 1:
+                if (
+                    self._last_error_response is not None
+                    and self._last_error_response.status == 401
+                ):
+                    continue
+                raise ExtractionContractError(
+                    "catalog page is missing its status or catalog container"
+                )
+            try:
+                await status.wait_for(state="visible", timeout=self._readiness_timeout_ms)
+                await self._page.wait_for_function(
+                    "([number]) => { if (window.location.pathname === '/login') return true; "
+                    "const status = document.querySelector('[role=status]'); "
+                    "return status && (status.dataset.state === 'error' || "
+                    "(status.dataset.state === 'success' && "
+                    "status.textContent.includes(`Page ${number} loaded`))); }",
+                    arg=[page_number],
+                    timeout=self._readiness_timeout_ms,
+                )
+            except PlaywrightTimeoutError as error:
+                if _is_login_page(self._page.url):
+                    continue
+                raise TransientTargetError(
+                    f"catalog page {page_number} did not become ready in time"
+                ) from error
+            if _is_login_page(self._page.url):
+                continue
+            if await status.get_attribute("data-state") == "error":
+                message = (await status.inner_text()).strip()
+                retry_after = None
+                if self._last_error_response is not None:
+                    if self._last_error_response.status == 401:
+                        await self._authenticate()
+                        continue
+                    if self._last_error_response.status != 429 and not (
+                        500 <= self._last_error_response.status <= 599
+                    ):
+                        raise PermanentTargetError(message or "catalog request failed permanently")
+                    retry_after = await self._last_error_response.header_value("Retry-After")
+                raise TransientTargetError(
+                    message or f"catalog page {page_number} failed to load",
+                    retry_after=retry_after,
+                )
+            return
+
+    async def _authenticate(self) -> None:
+        if self._on_authentication_required is None:
+            raise AuthenticationError("target session expired and credentials are unset")
+        await self._on_authentication_required(self._page)
 
     def _capture_error_response(self, response: Response) -> None:
         if response.request.resource_type not in {"fetch", "xhr"}:
@@ -196,3 +260,10 @@ class CatalogAdapter:
         if await locator.count() != 1:
             raise ExtractionContractError(f"catalog item is missing its {label} element")
         return (await locator.inner_text()).strip()
+
+
+def _is_login_page(url: str) -> bool:
+    try:
+        return urlsplit(url).path.rstrip("/") == "/login"
+    except ValueError:
+        return False

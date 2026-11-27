@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import math
+import os
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from resilient_browser_automation import __version__
+from resilient_browser_automation.authentication import BrowserAuthenticator
 from resilient_browser_automation.browser import BrowserManager
 from resilient_browser_automation.catalog import CatalogAdapter, CatalogRecord, CatalogSelectors
 from resilient_browser_automation.config import (
@@ -52,6 +54,7 @@ class _RunOptions:
     selectors: CatalogSelectors
     output_format: str
     worker: WorkerConfig
+    max_login_attempts: int
 
 
 def _positive_integer(value: str) -> int:
@@ -95,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--retry-initial-delay-seconds", type=_positive_float, default=0.5)
     run.add_argument("--retry-max-delay-seconds", type=_positive_float, default=30.0)
     run.add_argument("--retry-multiplier", type=_positive_float, default=2.0)
+    run.add_argument("--login-max-attempts", type=_positive_integer, default=2)
     run.add_argument("--output-format", choices=("human", "json"), default="human")
     run.add_argument("--catalog-testid", default="catalog")
     run.add_argument("--item-testid", default="catalog-item")
@@ -116,7 +120,12 @@ def _options_from_args(args: argparse.Namespace) -> _RunOptions:
         origin = f"{parts.scheme}://{parts.netloc}"
     except ValueError as error:
         raise ConfigurationError("--url is malformed") from error
-    target = TargetConfig(name=args.target_name, base_url=origin)
+    target = TargetConfig(
+        name=args.target_name,
+        base_url=origin,
+        username=os.environ.get("RBA_TARGET_USERNAME"),
+        password=os.environ.get("RBA_TARGET_PASSWORD"),
+    )
     job = JobSpec(
         job_id=args.job_id or str(uuid4()),
         target=target,
@@ -141,7 +150,14 @@ def _options_from_args(args: argparse.Namespace) -> _RunOptions:
             multiplier=args.retry_multiplier,
         ),
     )
-    return _RunOptions(job, args.database, selectors, args.output_format, worker)
+    return _RunOptions(
+        job,
+        args.database,
+        selectors,
+        args.output_format,
+        worker,
+        args.login_max_attempts,
+    )
 
 
 def _summary(
@@ -186,6 +202,12 @@ async def _execute(options: _RunOptions) -> tuple[int, dict[str, Any], str | Non
             async with BrowserManager() as browser:
                 async with browser.open_job() as browser_job:
                     response = await browser_job.page.goto(job.target_url)
+                    authenticator = BrowserAuthenticator(
+                        job.target.username,
+                        job.target.password,
+                        max_attempts=options.max_login_attempts,
+                        timeout_ms=int(options.worker.operation_timeout_seconds * 1000),
+                    )
                     if response is None:
                         raise TransientTargetError("catalog navigation returned no response")
                     if response.status == 429 or 500 <= response.status <= 599:
@@ -198,6 +220,7 @@ async def _execute(options: _RunOptions) -> tuple[int, dict[str, Any], str | Non
                         raise PermanentTargetError(
                             f"catalog navigation failed: HTTP {response.status}"
                         )
+                    await authenticator.authenticate_if_required(browser_job.page)
 
                     async def persist_page(
                         page_number: int, records: tuple[CatalogRecord, ...]
@@ -205,7 +228,9 @@ async def _execute(options: _RunOptions) -> tuple[int, dict[str, Any], str | Non
                         await store.save_page(job.job_id, page_number, records)
 
                     result = await CatalogAdapter(
-                        browser_job.page, selectors=options.selectors
+                        browser_job.page,
+                        selectors=options.selectors,
+                        on_authentication_required=authenticator.authenticate_if_required,
                     ).extract(page_limit=job.page_limit, on_page=persist_page)
                     return result.end_reason.value
             raise AssertionError("browser job exited without a collection result")
